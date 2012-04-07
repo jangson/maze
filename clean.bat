@@ -1,0 +1,3 @@
+@echo off
+echo cleanning...
+del /s /q *.pyc
