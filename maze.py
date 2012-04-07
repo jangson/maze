@@ -43,34 +43,74 @@ WALL_E_D = 0x20
 WALL_S_D = 0x40
 WALL_W_D = 0x80
 
+WALL_NONE       = 0
+WALL_EXIST      = 1
+WALL_DETECTED   = 2
+
+WALL_LU_W   = 0
+WALL_LU_S   = 1
+WALL_LU_E   = 2
+WALL_LU_N   = 3
+
+#---------------------------------------------------------------------------
+# Maze Panel 
+# class Wall(wx.Window):
+    # def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
+    
+
+
 #---------------------------------------------------------------------------
 # Maze Panel 
 class MazePanel(wx.Panel):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
         wx.Panel.__init__(self, parent, -1, style=style)
 
-        # Init maze variable
+        # Init default maze variables
         self.m_Parent = parent
         self.m_XCnt = 16
         self.m_YCnt = 16
         self.m_BlockWidth = 180   # 180 milimeter
         self.m_PollWidth  = 12    # Real size is 12 mm
-        self.m_MaxW = float(self.m_BlockWidth * self.m_XCnt + self.m_PollWidth)
-        self.m_MaxH = float(self.m_BlockWidth * self.m_YCnt + self.m_PollWidth)
-        
-        self.m_Maze = array ( 'B', (0 for x in range ( self.m_XCnt * self.m_YCnt )))
-        self.SetKnownWall()
-        self.m_MazeLoad = self.m_Maze
 
-        ## Init Mouse
+        # Initialize maze
+        self.m_MaxW = None 
+        self.m_MaxH = None
+        self.m_Walls = None
+        self.m_LookupWall = None
+        self.m_MazeWalls = None
+        self.m_DrawMargine = 10
+        self.m_DrawMargineMM = [ 0., 0. ]
+        self.m_MazeFile = array ( 'B', (0 for x in range ( self.m_XCnt * self.m_YCnt )))
+        # moouse
+        self.m_MousePos = None
         self.m_Mouse = mouse.Mouse(self) 
-        way = self.m_BlockWidth - self.m_PollWidth  
-        self.m_MousePos = ( way/2+self.m_PollWidth, way/2+self.m_PollWidth )
-        self.m_Mouse.SetMousePosMM ( self.m_MousePos  ) 
+        self.InitMaze ()
 
         # Setup panel
         self.SetBackgroundColour ( wx.Colour ( 0, 0, 0 ) ) 
+        self.Bind(wx.EVT_SIZE, self.OnSize)
         self.Bind(wx.EVT_PAINT, self.OnPaint)
+        self.Bind(wx.EVT_NC_PAINT, self.OnNCPaint)
+
+        # screen scale
+        self.m_Redraw = True;
+        self.m_Scale = None
+
+    def ResetMouse ( self ):
+        way = self.m_BlockWidth - self.m_PollWidth  
+        self.m_MousePos = ( way/2+self.m_PollWidth, way/2+self.m_PollWidth )
+        self.m_Mouse.SetMousePosMM ( self.m_MousePos  ) 
+        
+    def InitMaze ( self ):
+        # init maze
+        self.m_MaxW = float(self.m_BlockWidth * self.m_XCnt + self.m_PollWidth)
+        self.m_MaxH = float(self.m_BlockWidth * self.m_YCnt + self.m_PollWidth)
+
+        self.m_Polls = self.MakePolls ()
+        ( self.m_Walls, self.m_LookupWall ) = self.MakeWalls ()
+        self.m_MazeWalls = [ WALL_NONE ] * len(self.m_Walls)  
+        
+        self.ResetMouse ()
 
     def SetMaze ( self, maze_size, wblock, wpoll, mouse_pos, mouse_size ): 
         self.m_XCnt = maze_size [ 0 ]
@@ -78,16 +118,11 @@ class MazePanel(wx.Panel):
         self.m_BlockWidth = wblock 
         self.m_PollWidth  = wpoll 
 
-        self.m_MaxW = float(self.m_BlockWidth * self.m_XCnt + self.m_PollWidth)
-        self.m_MaxH = float(self.m_BlockWidth * self.m_YCnt + self.m_PollWidth)
-        # self.m_Maze = array ( 'B', (0 for x in range ( self.m_XCnt * self.m_YCnt )))
-        self.SetKnownWall()
-
         self.m_MousePos = mouse_pos
-
-        self.m_Mouse.SetMousePosMM ( self.m_MousePos  ) 
         self.m_Mouse.SetMouseSize ( mouse_size )
-        self.Refresh ()
+
+        selfReloadMaze ()
+        self.Reload
 
     def GetMaze ( self ): 
         return ( ( self.m_XCnt, self.m_YCnt ),
@@ -126,120 +161,214 @@ class MazePanel(wx.Panel):
             name = path.replace ( '\\', '/' )
             name = name.split ( '/' ) [-1]
             wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None ).SetTitle ( AppTitle + '(' + name + ')' )
-            self.m_MazeLoad = maze
-            self.m_Maze = maze
-            self.SetKnownWall()
-            self.Refresh ()
+            self.m_MazeFile = maze
+            self.ReloadMaze ()
 
-    def DrawPoll(self, dc, x, y):
-        dc.SetPen(wx.RED_PEN)
-        dc.SetBrush(wx.RED_BRUSH)
+    def ReloadMaze ( self ): 
+        maze = self.m_MazeFile
+        self.InitMaze ();
+        for idx in range ( len ( maze ) ) :
+            (x, y) = self.GetCellPosFromFileIndex ( idx )
+            if maze [ idx ] & WALL_W: 
+                self.SetWall ( x, y, WALL_LU_W, WALL_EXIST )
+            if maze [ idx ] & WALL_S: 
+                self.SetWall ( x, y, WALL_LU_S, WALL_EXIST )
+            if maze [ idx ] & WALL_E:
+                self.SetWall ( x, y, WALL_LU_E, WALL_EXIST )
+            if maze [ idx ] & WALL_N:
+                self.SetWall ( x, y, WALL_LU_N, WALL_EXIST )
+        self.SetKnownWall()
+        self.Refresh ()
+
+        
+    # Get cell index from maze file index
+    def GetCellPosFromFileIndex(self, idx):
+        x = idx / self.m_XCnt 
+        y = idx % self.m_YCnt 
+        return ( x, y ) 
+
+    # Get cell index from cell x, y position
+    def GetCellIndex(self, x, y):
+        w = self.m_XCnt 
+        h = self.m_YCnt 
+        return x + y * w
+
+    # Change maze x, y to screen x, y
+    def GetDrawXY(self, x, y):
+        return ( x, self.m_YCnt - y - 1 )
+
+    def MakePoll(self, x, y):
+        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+
         x = self.m_BlockWidth * x
         y = self.m_BlockWidth * y
-        dc.DrawRectangle(x, y, self.m_PollWidth, self.m_PollWidth)
+        return (x, y, self.m_PollWidth, self.m_PollWidth)
 
-    def ClearWallData(self, x, y, wall):
-        idx = x * self.m_YCnt + y
-        self.m_Maze [ idx ] = self.m_Maze [ idx ] & ( ~wall )  
+    def MakeNorthWall( self, x, y ):
+        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+        x1 = self.m_BlockWidth * x + self.m_PollWidth
+        y1 = self.m_BlockWidth * y
+        w1 = self.m_BlockWidth - self.m_PollWidth
+        h1 = self.m_PollWidth
+        return ( x1, y1, w1, h1 ) 
 
-    def SetWallData(self, x, y, wall):
-        idx = x * self.m_YCnt + y
-        self.m_Maze [ idx ] = self.m_Maze [ idx ] | wall  
+    def MakeEastWall( self, x, y ):
+        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+        x1 = self.m_BlockWidth * (x + 1)
+        y1 = self.m_BlockWidth * y + self.m_PollWidth
+        w1 = self.m_PollWidth
+        h1 = self.m_BlockWidth - self.m_PollWidth
+        return ( x1, y1, w1, h1 ) 
 
-    def GetWallData(self, x, y):
-        return self.m_Maze [ x * self.m_YCnt + y ] 
+    def MakeSouthWall( self, x, y ):
+        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+        x1 = self.m_BlockWidth * x + self.m_PollWidth
+        y1 = self.m_BlockWidth * (y + 1)
+        w1 = self.m_BlockWidth - self.m_PollWidth
+        h1 = self.m_PollWidth
+        return ( x1, y1, w1, h1 ) 
 
-    def SetKnownWall(self):
-        for y in range ( 0, self.m_YCnt ):
-            self.SetWallData ( 0, y, WALL_W_D | WALL_W )
-            self.SetWallData ( self.m_XCnt-1, y, WALL_E_D | WALL_E )
-            
-        for x in range ( 0, self.m_XCnt ):
-            self.SetWallData ( x, 0, WALL_S_D | WALL_S )
-            self.SetWallData ( x, self.m_YCnt-1, WALL_N_D | WALL_N )
+    def MakeWestWall( self, x, y ):
+        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+        x1 = self.m_BlockWidth * x
+        y1 = self.m_BlockWidth * y + self.m_PollWidth
+        w1 = self.m_PollWidth
+        h1 = self.m_BlockWidth - self.m_PollWidth
+        return ( x1, y1, w1, h1 ) 
 
-    def GetScreenXY(self, x, y):
-        return [ x, self.m_YCnt - y - 1 ]
+    def MakeWSENWalls ( self, x, y ):
+        return (
+                self.MakeWestWall (x, y),
+                self.MakeSouthWall (x, y),
+                self.MakeEastWall (x, y),
+                self.MakeNorthWall (x, y) )
 
-    def DrawWall(self, dc, x, y, wall):
-        [x, y] = self.GetScreenXY ( x, y ) 
+    def MakePolls ( self ): 
+        polls = []
+        w = self.m_XCnt 
+        h = self.m_YCnt 
 
-        found = 0
+        for y in range(-1, h):
+            for x in range(0, w+1):
+                polls.append ( self.MakePoll(x, y) )
 
-        if wall & WALL_N:
-            if wall & WALL_N_D:
-                found = 1
-            x = self.m_BlockWidth * x + self.m_PollWidth
-            y = self.m_BlockWidth * y
-            w = self.m_BlockWidth - self.m_PollWidth
-            h = self.m_PollWidth
+        # print len ( polls )
+        return polls
 
-        elif wall & WALL_E:
-            if wall & WALL_E_D:
-                found = 1
-            x = self.m_BlockWidth * (x + 1)
-            y = self.m_BlockWidth * y + self.m_PollWidth
-            w = self.m_PollWidth
-            h = self.m_BlockWidth - self.m_PollWidth
+    def MakeWalls ( self ): 
+        walls = []
+        lookup_walls = []
+        w = self.m_XCnt 
+        h = self.m_YCnt 
 
-        elif wall & WALL_S:
-            if wall & WALL_S_D:
-                found = 1
-            x = self.m_BlockWidth * x + self.m_PollWidth
-            y = self.m_BlockWidth * (y + 1)
-            w = self.m_BlockWidth - self.m_PollWidth
-            h = self.m_PollWidth
+        for y in range(0, h):
+            for x in range(0, w):
+                # Get W,S,E,N walls 
+                wall_WSEN = self.MakeWSENWalls ( x, y ) 
 
-        elif wall & WALL_W:
-            if wall & WALL_W_D:
-                found = 1
-            x = self.m_BlockWidth * x
-            y = self.m_BlockWidth * y + self.m_PollWidth
-            w = self.m_PollWidth
-            h = self.m_BlockWidth - self.m_PollWidth
+                # Add W,S,E,N walls except added wall and make lookup table
+                lookup = []
+                for wall in wall_WSEN: 
+                    try:
+                        w_idx = walls.index ( wall ) 
+                        lookup.append ( w_idx )
+                        continue
+                    except:
+                        walls.append ( wall )
+                        lookup.append ( len ( walls ) - 1 )
+                lookup_walls.append ( lookup )
 
-        else:
-            return
+        return ( walls, lookup_walls )
 
-        if found:
+    def GetWall ( self, x, y, type ):
+        idx_wall_wsen = self.m_LookupWall [ self.GetCellIndex ( x, y ) ] 
+        return self.m_MazeWalls [ idx_wall_wsen [ type ] ]
+
+    def SetWall (self, x, y, type, wall):
+        idx_wall_wsen = self.m_LookupWall [ self.GetCellIndex ( x, y ) ] 
+        self.m_MazeWalls [ idx_wall_wsen [type] ] = wall
+
+    def SetAllWall (self, type):
+        self.m_MazeWalls = [ type ] * len(self.m_Walls) 
+
+    def DrawAllPolls ( self, dc ):
+        dc.SetPen(wx.RED_PEN)
+        dc.SetBrush(wx.RED_BRUSH)
+        for (x, y, w, h) in self.m_Polls:
+            dc.DrawRectangle ( x+self.m_DrawMargineMM [ 0 ], y+self.m_DrawMargineMM [ 1 ], w, h ) 
+
+    def DrawWall ( self, dc, wall, type ):
+        found = False
+        ( x, y, w, h ) = wall
+        if type == WALL_NONE:
+            dc.SetPen(wx.BLACK_PEN)
+            dc.SetBrush(wx.BLACK_BRUSH)
+        elif type == WALL_EXIST:
+            dc.SetPen(wx.GREEN_PEN)
+            dc.SetBrush(wx.TRANSPARENT_BRUSH)
+        elif type == WALL_DETECTED:
             dc.SetPen(wx.RED_PEN)
             dc.SetBrush(wx.RED_BRUSH)
         else:
-            dc.SetPen(wx.GREEN_PEN)
-            dc.SetBrush(wx.TRANSPARENT_BRUSH)
+            return
+        
+        dc.DrawRectangle ( x+self.m_DrawMargineMM [ 0 ], y+self.m_DrawMargineMM [ 1 ], w, h ) 
 
-        dc.DrawRectangle(x, y, w, h)
+    def DrawAllWalls ( self, dc ):
+        for idx in range ( len ( self.m_MazeWalls ) ) :
+            self.DrawWall( dc, self.m_Walls [ idx ], self.m_MazeWalls[ idx ] ) 
+        # self.m_Mouse.DrawMouse ( dc, self.m_DrawMargineMM )
+
+    def SetKnownWall(self):
+        for y in range ( 0, self.m_YCnt ):
+            self.SetWall( 0, y, WALL_LU_W, WALL_DETECTED )
+            self.SetWall( self.m_XCnt-1, y, WALL_LU_E, WALL_DETECTED )
+            
+        for x in range ( 0, self.m_XCnt ):
+            self.SetWall( x, 0, WALL_LU_S, WALL_DETECTED )
+            self.SetWall( x, self.m_YCnt-1, WALL_LU_N, WALL_DETECTED )
 
     def DrawUpdatedWall(self, dc, x, y):
         self.DrawWall ( x, y, self.GetWallData(x, y) )
-        
-    def DrawAllWall ( self, dc ):
-        (w, h) = dc.GetSize();
-        scaleX = float(float(w)/self.m_MaxW)
-        scaleY = float(float(h)/self.m_MaxH)
-        #print "scale ", (scaleX, scaleY)
-        dc.SetUserScale(min(scaleX, scaleY), min(scaleX, scaleY))
 
-        for x in range(0, self.m_XCnt+1):
-            for y in range(0, self.m_YCnt+1):
-                self.DrawPoll(dc, x, y)
+    def OnSize(self, event):
+        (w, h) = event.GetSize();
+        (w, h) = ( float ( w ), float ( h ) )
+        ( wmm, hmm ) = ( float ( self.m_MaxW ), float ( self.m_MaxH ) )
+        margine = float ( self.m_DrawMargine ) 
 
-        for x in range(0, self.m_XCnt):
-            for y in range(0, self.m_YCnt):
-                self.DrawWall ( dc, x, y, self.GetWallData ( x, y ) & (WALL_N_D|WALL_N) )
-                self.DrawWall ( dc, x, y, self.GetWallData ( x, y ) & (WALL_W_D|WALL_W) )
-                if x == self.m_XCnt-1:
-                    self.DrawWall ( dc, x, y, self.GetWallData ( x, y ) & (WALL_E_D|WALL_E) )
-                if y == 0:
-                    self.DrawWall ( dc, x, y, self.GetWallData ( x, y ) & (WALL_S_D|WALL_S) )
+        w_margine = w - margine * 2 
+        h_margine = h - margine * 2  
+        scaleX = w_margine / wmm
+        scaleY = h_margine / hmm
 
-        self.m_Mouse.DrawMouse ( dc ) 
+        if scaleX <= scaleY:
+            margineMM = ( ( h / scaleX ) - hmm ) / 2
+            self.m_DrawMargineMM = ( 
+                    margine / scaleX, 
+                    margineMM)
+        else:
+            margineMM = ( ( w / scaleY ) - wmm ) / 2
+            self.m_DrawMargineMM = ( 
+                    margineMM, 
+                    margine / scaleY ) 
+
+        self.m_Scale = (min(scaleX, scaleY), min(scaleX, scaleY))
+
+        self.m_Redraw = True;
+        # print "OnSize: scale=", self.m_Scale 
 
     def OnPaint(self, evt):
         dc = wx.PaintDC(self)
+        # print "OnPaint: clip=", dc.GetClippingBox ()
         dc.Clear()
-        self.DrawAllWall( dc )
+        dc.SetUserScale ( self.m_Scale [ 0 ],  self.m_Scale [ 1 ])
+        self.DrawAllPolls (dc)
+        self.DrawAllWalls (dc)
 
+    def OnNCPaint(self, evt):
+        dc = wx.PaintDC(self)
+        # print "OnNCPaint: size=", dc.GetSize () 
 
 #---------------------------------------------------------------------------
 # Setting dialog
@@ -260,37 +389,37 @@ class SettingDialog(wx.Dialog):
 
         gs = wx.GridSizer ( 6, 2 )
 
-        t1 = wx.StaticText(self, -1, "Maze Size w, h(4~64)", style = wx.ALIGN_CENTER | wx.ST_NO_AUTORESIZE)
-        self.e_maze_w = e1 = masked.NumCtrl (self,  value = maze_size [ 0 ], min=4, max=64, limited=edit_limited, integerWidth=2, allowNegative=False)
-        self.e_maze_h = e2 = masked.NumCtrl (self,  value = maze_size [ 1 ], min=4, max=64, limited=edit_limited, integerWidth=2, allowNegative=False)
+        t1 = wx.StaticText ( self, - 1, "Maze Size w, h(4~64)" )
+        self.e_maze_w = e1 = masked.NumCtrl (self,  value = maze_size [ 0 ], min=4, max=64, limited=edit_limited, integerWidth=3, allowNegative=False)
+        self.e_maze_h = e2 = masked.NumCtrl (self,  value = maze_size [ 1 ], min=4, max=64, limited=edit_limited, integerWidth=3, allowNegative=False)
 
         sizer = wx.BoxSizer ( wx.HORIZONTAL )
         sizer.AddSpacer ( 10 )
         sizer.Add ( e1, wx.ALIGN_LEFT )
         sizer.AddSpacer ( 10 )
         sizer.Add ( e2, wx.ALIGN_LEFT )
-        gs.Add ( t1, 0, wx.EXPAND )
-        gs.Add ( sizer, 0, wx.EXPAND )
+        gs.Add ( t1, 0, wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL )
+        gs.Add ( sizer, 0, wx.ALIGN_CENTER_VERTICAL )
 
-        t1 = wx.StaticText(self, -1, "Block width(50~300mm)", style = wx.ALIGN_CENTER | wx.ST_NO_AUTORESIZE )
+        t1 = wx.StaticText ( self, - 1, "Block width(50~300mm)" )
         self.e_block_w = e1 = masked.NumCtrl (self,  value=wblock, min=50, max=300, limited=edit_limited, integerWidth=3, allowNegative=False)
 
         sizer = wx.BoxSizer ( wx.HORIZONTAL )
         sizer.AddSpacer ( 10 )
         sizer.Add ( e1, wx.ALIGN_LEFT )
-        gs.Add ( t1, 0, wx.EXPAND )
-        gs.Add ( sizer, 0, wx.EXPAND )
+        gs.Add ( t1, 0, wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL )
+        gs.Add ( sizer, 0, wx.ALIGN_CENTER_VERTICAL )
 
-        t1 = wx.StaticText(self, -1, "Poll width(4~30mm)", style = wx.ALIGN_CENTER | wx.ST_NO_AUTORESIZE )
-        self.e_poll_w = e1 = masked.NumCtrl (self,  value=wpoll, min=4, max=30, limited=edit_limited, integerWidth=2, allowNegative=False)
+        t1 = wx.StaticText ( self, - 1, "Poll width(4~30mm)" )
+        self.e_poll_w = e1 = masked.NumCtrl (self,  value=wpoll, min=4, max=30, limited=edit_limited, integerWidth=3, allowNegative=False)
 
         sizer = wx.BoxSizer ( wx.HORIZONTAL )
         sizer.AddSpacer ( 10 )
         sizer.Add ( e1, wx.ALIGN_LEFT )
-        gs.Add ( t1, 0, wx.EXPAND )
-        gs.Add ( sizer, 0, wx.EXPAND )
+        gs.Add ( t1, 0, wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL )
+        gs.Add ( sizer, 0, wx.ALIGN_CENTER_VERTICAL )
 
-        t1 = wx.StaticText(self, -1, "Mouse position x,y(50~300mm)", style = wx.ALIGN_CENTER | wx.ST_NO_AUTORESIZE )
+        t1 = wx.StaticText ( self, - 1, "Mouse position x,y(50~300mm)" )
         self.e_mouse_x = e1 = masked.NumCtrl (self,  value=mouse_pos[0], min=50, max=300, limited=edit_limited, integerWidth=3, allowNegative=False)
         self.e_mouse_y = e2 = masked.NumCtrl (self,  value=mouse_pos[1], min=50, max=300, limited=edit_limited, integerWidth=3, allowNegative=False)
 
@@ -299,10 +428,10 @@ class SettingDialog(wx.Dialog):
         sizer.Add ( e1, wx.ALIGN_LEFT )
         sizer.AddSpacer ( 10 )
         sizer.Add ( e2, wx.ALIGN_LEFT )
-        gs.Add ( t1, 0, wx.EXPAND )
-        gs.Add ( sizer, 0, wx.EXPAND )
+        gs.Add ( t1, 0, wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL )
+        gs.Add ( sizer, 0, wx.ALIGN_CENTER_VERTICAL )
         
-        t1 = wx.StaticText(self, -1, "Mouse size w, h (20~300mm)", style = wx.ALIGN_CENTER | wx.ST_NO_AUTORESIZE )
+        t1 = wx.StaticText ( self, - 1, "Mouse size w, h (20~300mm)" )
         self.e_mouse_w = e1 = masked.NumCtrl (self,  value=mouse_size[0], min=20, max=300, limited=edit_limited, integerWidth=3, allowNegative=False)
         self.e_mouse_h = e2= masked.NumCtrl (self,  value=mouse_size[1], min=20, max=300, limited=edit_limited, integerWidth=3, allowNegative=False)
 
@@ -311,13 +440,13 @@ class SettingDialog(wx.Dialog):
         sizer.Add ( e1, wx.ALIGN_LEFT )
         sizer.AddSpacer ( 10 )
         sizer.Add ( e2, wx.ALIGN_LEFT )
-        gs.Add ( t1, 0, wx.EXPAND )
-        gs.Add ( sizer, 0, wx.EXPAND )
+        gs.Add ( t1, 0, wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL )
+        gs.Add ( sizer, 0, wx.ALIGN_CENTER_VERTICAL )
         
         b1 = wx.Button(self, wx.ID_OK)
         b2 = wx.Button(self, wx.ID_CANCEL)
-        gs.Add ( b1, 0, wx.EXPAND )
-        gs.Add ( b2, 0, wx.EXPAND )
+        gs.Add ( b1, 0, wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL )
+        gs.Add ( b2, 0, wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL )
 
         self.SetSizer( gs )
 
@@ -399,6 +528,7 @@ class ControlPanel(wx.Panel):
 
         self.maze_list = wx.ListCtrl(self, -1, style = wx.LC_REPORT | wx.LC_NO_HEADER | wx.LC_SINGLE_SEL | wx.LC_SORT_ASCENDING )
         # self.maze_list.SetColumnWidth ( 0, wx.LIST_AUTOSIZE ) 
+        self.maze_list.InsertColumn ( 0, "" )
         self.maze_list.SetColumnWidth ( 0, 200 )
         gs.Add ( self.maze_list, 0, wx.EXPAND )
 
@@ -464,8 +594,12 @@ class ControlPanel(wx.Panel):
                     self.maze_list.InsertStringItem (0, next [ l+1: ] )
 
     def LoadMazeList(self):
-        self.maze_list.ClearAll ()
-        self.maze_list.InsertColumn ( 0, "" )
+        # self.maze_list.ClearAll ()
+        # self.maze_list.InsertColumn ( 0, "" )
+        # li = self.maze_list.GetColumn ( 0 )
+        # li.Clear ()
+        # self.maze_list.SetColumn ( 0, li )
+        self.maze_list.DeleteAllItems()
         self.FilesInDir(self.m_Path)
         self.maze_list.GetItemCount ()
         self.maze_list.SetItemState(0,
@@ -486,7 +620,10 @@ class ControlPanel(wx.Panel):
             # self.OnClickSetting(self, None)
 
     def OnClickRunPause(self, event):
-        print "RunStop" 
+        print "run/pause"
+        maze = self.m_Maze
+        _mouse = maze.m_Mouse
+        _mouse.CommandMouse ( mouse.MOUSE_CMD_TEST ) 
         
     def OnClickStopMouse(self, event):
         print "stop mouse"
@@ -527,7 +664,6 @@ frame_size_x = 800
 frame_size_y = 750
 
 class AppFrame(wx.Frame):
-
     def __init__(self, parent, title):
         # create frame
         frame = wx.Frame.__init__(self, parent, ID_WINDOW_TOP_LEVEL, title, size=(frame_size_x, frame_size_y))
