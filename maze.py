@@ -11,15 +11,6 @@
 #-------------------------------------------------------------------------------
 # -*- coding: cp949 -*-
 
-# .maz file format description
-# Using one byte per block. Bit description is below.
-#           | Known |  wall |
-#           | 1  / 0| 1 / 0 |
-# bits      7 6 5 4 3 2 1 0
-#           +-+-+-+-+-+-+-+-+
-# direction |W|S|E|N|W|S|E|N|
-#           +-+-+-+-+-+-+-+-+
-
 import  sys, os
 import  time
 from    array import *
@@ -34,6 +25,14 @@ import  wx.lib.rcsizer          as rcs
 
 import  mouse
 
+# .maz file format description
+# Using one byte per block. Bit description is below.
+#           | Known |  wall |
+#           | 1  / 0| 1 / 0 |
+# bits      7 6 5 4 3 2 1 0
+#           +-+-+-+-+-+-+-+-+
+# direction |W|S|E|N|W|S|E|N|
+#           +-+-+-+-+-+-+-+-+
 WALL_N = 1
 WALL_E = 2
 WALL_S = 4
@@ -43,14 +42,27 @@ WALL_E_D = 0x20
 WALL_S_D = 0x40
 WALL_W_D = 0x80
 
+# Wall type
 WALL_NONE       = 0
 WALL_EXIST      = 1
 WALL_DETECTED   = 2
 
+# Wall index for lookup
 WALL_LU_W   = 0
 WALL_LU_S   = 1
 WALL_LU_E   = 2
 WALL_LU_N   = 3
+
+# Default mouse definition
+MOUSE_SIZE      = ( 60, 80 )
+
+NAZE_COLORS = {
+        'Background'        : ( 20, 20, 20 ),
+        'MazeBorder'        : 'Red',
+        'Poll'              : 'Red',
+        'WallExist'         : 'Green',
+        'WallDetected'      : 'Red'
+} 
 
 #---------------------------------------------------------------------------
 # Maze Panel 
@@ -61,196 +73,174 @@ WALL_LU_N   = 3
 
 #---------------------------------------------------------------------------
 # Maze Panel 
-class MazePanel(wx.Panel):
+try:
+    from floatcanvas import NavCanvas, FloatCanvas, Resources
+except ImportError: # if it's not there locally, try the wxPython lib.
+    from wx.lib.floatcanvas import NavCanvas, FloatCanvas, Resources
+import wx.lib.colourdb
+import time, random
+
+class MazePanel(NavCanvas.NavCanvas):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
-        wx.Panel.__init__(self, parent, -1, style=style)
+        NavCanvas.NavCanvas.__init__(self, parent, -1, style=style, BackgroundColor = ( 20, 20, 20 ) )
+
 
         # Init default maze variables
         self.m_Parent = parent
-        self.m_XCnt = 16
-        self.m_YCnt = 16
+        self.m_Colors = NAZE_COLORS
+        self.m_MazeSize = ( 16, 16 )
         self.m_BlockWidth = 180   # 180 milimeter
         self.m_PollWidth  = 12    # Real size is 12 mm
 
         # Initialize maze
-        self.m_MaxW = None 
-        self.m_MaxH = None
+        ( w, h ) = self.m_MazeSize
+        self.m_MaxW = float(self.m_BlockWidth * w + self.m_PollWidth)
+        self.m_MaxH = float(self.m_BlockWidth * h + self.m_PollWidth)
         self.m_Walls = None
         self.m_LookupWall = None
-        self.m_MazeWalls = None
-        self.m_DrawMargine = 10
-        self.m_DrawMargineMM = [ 0., 0. ]
-        self.m_MazeFile = array ( 'B', (0 for x in range ( self.m_XCnt * self.m_YCnt )))
-        # moouse
-        self.m_MousePos = None
-        self.m_Mouse = mouse.Mouse(self) 
+        self.m_TypeWalls = None
+        self.m_MazeFile = array ( 'B', (0 for x in range ( self.m_MazeSize [0] * self.m_MazeSize [1] )))
         self.InitMaze ()
 
+        # mouse
+        self.m_Mouse = mouse.Mouse(self) 
+        size = MOUSE_SIZE
+        way = self.m_BlockWidth - self.m_PollWidth  
+        pos = ( way/2+self.m_PollWidth, way/2+self.m_PollWidth )
+
+        self.m_MouseSize = size
+        self.m_MousePosInit = self.m_MousePos = pos
+        self.m_MouseAngle = radians(0)
+        self.m_Mouse.SetMousePos ( self.m_MousePos  ) 
+        self.m_Mouse.SetMouseSize ( self.m_MouseSize  ) 
+        self.m_MouseImage = None
+        self.m_MouseObject = None
+        self.InitMouse () 
+
         # Setup panel
-        self.SetBackgroundColour ( wx.Colour ( 0, 0, 0 ) ) 
-        self.Bind(wx.EVT_SIZE, self.OnSize)
-        self.Bind(wx.EVT_PAINT, self.OnPaint)
-        self.Bind(wx.EVT_NC_PAINT, self.OnNCPaint)
+        # self.Bind(wx.EVT_SIZE, self.OnSize)
+        # self.Bind(wx.EVT_PAINT, self.OnPaint)
+        # self.Bind(wx.EVT_NC_PAINT, self.OnNCPaint)
 
         # screen scale
         self.m_Redraw = True;
         self.m_Scale = None
-
-    def ResetMouse ( self ):
-        way = self.m_BlockWidth - self.m_PollWidth  
-        self.m_MousePos = ( way/2+self.m_PollWidth, way/2+self.m_PollWidth )
-        self.m_Mouse.SetMousePosMM ( self.m_MousePos  ) 
+        
+    def Log ( self, text ):
+        log = wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None )
+        log.Log ( text )
+            
+    ########################################################################
+    # Methods for initialization
+    ########################################################################
+    def InitMouse ( self ):
+        self.m_MousePos = self.m_MousePosInit
+        pass
         
     def InitMaze ( self ):
-        # init maze
-        self.m_MaxW = float(self.m_BlockWidth * self.m_XCnt + self.m_PollWidth)
-        self.m_MaxH = float(self.m_BlockWidth * self.m_YCnt + self.m_PollWidth)
+        self.m_Polls = []
+        self.m_Walls, self.m_LookupWall = [], []
+        self.m_TypeWalls = []
+        self.m_MouseObject = None
+        self.Canvas.InitAll()
+        w = self.m_BlockWidth / 3
+        color = self.m_Colors['MazeBorder']
+        self.Canvas.AddRectangle ( 
+                ( 0, 0 ), 
+                ( self.m_MaxW, self.m_MaxH ), 
+                LineColor = color, 
+                LineWidth = 1, 
+                FillColor = None )
 
         self.m_Polls = self.MakePolls ()
         ( self.m_Walls, self.m_LookupWall ) = self.MakeWalls ()
-        self.m_MazeWalls = [ WALL_NONE ] * len(self.m_Walls)  
-        
-        self.ResetMouse ()
-
-    def SetMaze ( self, maze_size, wblock, wpoll, mouse_pos, mouse_size ): 
-        self.m_XCnt = maze_size [ 0 ]
-        self.m_YCnt = maze_size [ 1 ]
-        self.m_BlockWidth = wblock 
-        self.m_PollWidth  = wpoll 
-
-        self.m_MousePos = mouse_pos
-        self.m_Mouse.SetMouseSize ( mouse_size )
-
-        selfReloadMaze ()
-        self.Reload
-
-    def GetMaze ( self ): 
-        return ( ( self.m_XCnt, self.m_YCnt ),
-                 self.m_BlockWidth,
-                 self.m_PollWidth,
-                 self.m_MousePos,
-                 self.m_Mouse.GetMouseSize() )
-
-    def LoadMaze ( self, path ): 
-        try:
-            f = open(path, "rb")
-        except:
-            msg = "Openning '" + path + "' failed!"
-            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMaze', wx.OK | wx.ICON_ERROR )
-            dlg.ShowModal()
-            dlg.Destroy()
-            return 0
-
-        try:
-            maze = array ( 'B' )
-            maze.fromfile(f, self.m_XCnt*self.m_YCnt)
-        except:
-            msg = "Reading '" + path + "' failed!"
-            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMaze', wx.OK | wx.ICON_ERROR )
-            dlg.ShowModal()
-            dlg.Destroy()
-            return 0
-        f.close()
-
-        if len ( maze ) != self.m_XCnt*self.m_YCnt:
-            msg = "File size is so short. check maze file!"
-            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMaze', wx.OK | wx.ICON_ERROR )
-            dlg.ShowModal()
-            dlg.Destroy()
-        else:
-            name = path.replace ( '\\', '/' )
-            name = name.split ( '/' ) [-1]
-            wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None ).SetTitle ( AppTitle + '(' + name + ')' )
-            self.m_MazeFile = maze
-            self.ReloadMaze ()
-
-    def ReloadMaze ( self ): 
-        maze = self.m_MazeFile
-        self.InitMaze ();
-        for idx in range ( len ( maze ) ) :
-            (x, y) = self.GetCellPosFromFileIndex ( idx )
-            if maze [ idx ] & WALL_W: 
-                self.SetWall ( x, y, WALL_LU_W, WALL_EXIST )
-            if maze [ idx ] & WALL_S: 
-                self.SetWall ( x, y, WALL_LU_S, WALL_EXIST )
-            if maze [ idx ] & WALL_E:
-                self.SetWall ( x, y, WALL_LU_E, WALL_EXIST )
-            if maze [ idx ] & WALL_N:
-                self.SetWall ( x, y, WALL_LU_N, WALL_EXIST )
+        self.m_TypeWalls = [ WALL_NONE ] * len(self.m_Walls)  
         self.SetKnownWall()
-        self.Refresh ()
 
+    def LoadMouseImage ( self, filename = "mouse.png" ):
+        size = self.m_MouseSize 
+        bmp = wx.Bitmap( filename )        
+        img = bmp.ConvertToImage()
+        img.Rescale ( size [ 0 ] , size [ 1 ] )
+        self.m_MouseImage = img 
         
+    # This methos have to call after all class initialzed because DrawMouse() required it
+    def PostInit ( self ):
+        self.LoadMouseImage ()
+        self.DrawMaze ()
+
+    ########################################################################
+    # Methods for Making wall, poll
+    ########################################################################
     # Get cell index from maze file index
     def GetCellPosFromFileIndex(self, idx):
-        x = idx / self.m_XCnt 
-        y = idx % self.m_YCnt 
+        (w, h) = self.m_MazeSize
+        x = idx / h 
+        y = idx % h 
         return ( x, y ) 
 
-    # Get cell index from cell x, y position
-    def GetCellIndex(self, x, y):
-        w = self.m_XCnt 
-        h = self.m_YCnt 
-        return x + y * w
-
     # Change maze x, y to screen x, y
-    def GetDrawXY(self, x, y):
-        return ( x, self.m_YCnt - y - 1 )
+    def GetDrawXY(self, pos):
+        ( x, y ) = pos
+        return ( x, y )
 
-    def MakePoll(self, x, y):
-        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
-
+    def MakePoll(self, pos):
+        [x, y] = self.GetDrawXY ( pos ) # change to screen position 
         x = self.m_BlockWidth * x
         y = self.m_BlockWidth * y
-        return (x, y, self.m_PollWidth, self.m_PollWidth)
+        return ( x, y , self.m_PollWidth, self.m_PollWidth)
 
-    def MakeNorthWall( self, x, y ):
-        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+    def MakeNorthWall( self, pos ):
+        [x, y] = self.GetDrawXY ( pos ) # change to screen position 
         x1 = self.m_BlockWidth * x + self.m_PollWidth
-        y1 = self.m_BlockWidth * y
+        y1 = self.m_BlockWidth * ( y + 1 )
         w1 = self.m_BlockWidth - self.m_PollWidth
         h1 = self.m_PollWidth
         return ( x1, y1, w1, h1 ) 
 
-    def MakeEastWall( self, x, y ):
-        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+    def MakeEastWall( self, pos ):
+        [x, y] = self.GetDrawXY ( pos ) # change to screen position 
         x1 = self.m_BlockWidth * (x + 1)
         y1 = self.m_BlockWidth * y + self.m_PollWidth
         w1 = self.m_PollWidth
         h1 = self.m_BlockWidth - self.m_PollWidth
         return ( x1, y1, w1, h1 ) 
 
-    def MakeSouthWall( self, x, y ):
-        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+    def MakeSouthWall( self, pos ):
+        [x, y] = self.GetDrawXY ( pos ) # change to screen position 
         x1 = self.m_BlockWidth * x + self.m_PollWidth
-        y1 = self.m_BlockWidth * (y + 1)
+        y1 = self.m_BlockWidth * y
         w1 = self.m_BlockWidth - self.m_PollWidth
         h1 = self.m_PollWidth
         return ( x1, y1, w1, h1 ) 
 
-    def MakeWestWall( self, x, y ):
-        [x, y] = self.GetDrawXY ( x, y ) # change to screen position 
+    def MakeWestWall( self, pos ):
+        [x, y] = self.GetDrawXY ( pos ) # change to screen position 
         x1 = self.m_BlockWidth * x
         y1 = self.m_BlockWidth * y + self.m_PollWidth
         w1 = self.m_PollWidth
         h1 = self.m_BlockWidth - self.m_PollWidth
         return ( x1, y1, w1, h1 ) 
 
-    def MakeWSENWalls ( self, x, y ):
+    def MakeWSENWalls ( self, pos ):
         return (
-                self.MakeWestWall (x, y),
-                self.MakeSouthWall (x, y),
-                self.MakeEastWall (x, y),
-                self.MakeNorthWall (x, y) )
+                self.MakeWestWall (pos),
+                self.MakeSouthWall (pos),
+                self.MakeEastWall (pos),
+                self.MakeNorthWall (pos) )
 
     def MakePolls ( self ): 
+        color = self.m_Colors [ 'Poll']
         polls = []
-        w = self.m_XCnt 
-        h = self.m_YCnt 
+        ( w, h ) = self.m_MazeSize
 
-        for y in range(-1, h):
+        for y in range(0, h+1):
             for x in range(0, w+1):
-                polls.append ( self.MakePoll(x, y) )
+                poll = self.MakePoll( ( x, y ) ) 
+                pos = ( poll [0], poll [1] )
+                size = ( poll [2], poll [3] )
+                canvas = self.Canvas
+                polls.append ( canvas.AddRectangle ( pos, size, LineColor = color, FillColor = color ) )
 
         # print len ( polls )
         return polls
@@ -258,117 +248,230 @@ class MazePanel(wx.Panel):
     def MakeWalls ( self ): 
         walls = []
         lookup_walls = []
-        w = self.m_XCnt 
-        h = self.m_YCnt 
-
+        ( w, h ) = self.m_MazeSize
         for y in range(0, h):
             for x in range(0, w):
                 # Get W,S,E,N walls 
-                wall_WSEN = self.MakeWSENWalls ( x, y ) 
+                wall_WSEN = self.MakeWSENWalls ( ( x, y ) ) 
 
                 # Add W,S,E,N walls except added wall and make lookup table
                 lookup = []
                 for wall in wall_WSEN: 
-                    try:
+                    try: # checking exist wall
                         w_idx = walls.index ( wall ) 
                         lookup.append ( w_idx )
                         continue
                     except:
-                        walls.append ( wall )
+                        pos = ( wall [0], wall [1] )
+                        size = ( wall [2], wall [3] )
+                        canvas = self.Canvas
+                        walls.append ( canvas.AddRectangle ( pos, size, LineColor = None, FillColor = None ) )
                         lookup.append ( len ( walls ) - 1 )
+                
                 lookup_walls.append ( lookup )
 
         return ( walls, lookup_walls )
 
-    def GetWall ( self, x, y, type ):
-        idx_wall_wsen = self.m_LookupWall [ self.GetCellIndex ( x, y ) ] 
-        return self.m_MazeWalls [ idx_wall_wsen [ type ] ]
 
-    def SetWall (self, x, y, type, wall):
-        idx_wall_wsen = self.m_LookupWall [ self.GetCellIndex ( x, y ) ] 
-        self.m_MazeWalls [ idx_wall_wsen [type] ] = wall
+    ########################################################################
+    # Methods for maze access
+    ########################################################################
+    # Get cell index from cell x, y position
+    def GetCellIndex(self, pos):
+        ( x, y ) = pos
+        ( w, h ) = self.m_MazeSize
+        return x + y * w
+
+    def GetWall ( self, pos, type ):
+        idx_wall_wsen = self.m_LookupWall [ self.GetCellIndex ( pos ) ] 
+        return self.m_TypeWalls [ idx_wall_wsen [ type ] ]
+
+    def SetWall (self, pos, type, wall, draw = False):
+        idx_wall = self.m_LookupWall [ self.GetCellIndex ( pos ) ] 
+        self.m_TypeWalls [ idx_wall[type] ] = wall
 
     def SetAllWall (self, type):
-        self.m_MazeWalls = [ type ] * len(self.m_Walls) 
+        self.m_TypeWalls = [ type ] * len(self.m_Walls) 
+        
+    def SetKnownWall(self):
+        ( w, h ) = self.m_MazeSize
+        for y in range ( 0, h ):
+            self.SetWall( ( 0, y ), WALL_LU_W, WALL_DETECTED )
+            self.SetWall( ( w-1, y ), WALL_LU_E, WALL_DETECTED )
+            
+        for x in range ( 0, w ):
+            self.SetWall( ( x, 0 ), WALL_LU_S, WALL_DETECTED )
+            self.SetWall( ( x, h - 1 ), WALL_LU_N, WALL_DETECTED )
 
-    def DrawAllPolls ( self, dc ):
-        dc.SetPen(wx.RED_PEN)
-        dc.SetBrush(wx.RED_BRUSH)
-        for (x, y, w, h) in self.m_Polls:
-            dc.DrawRectangle ( x+self.m_DrawMargineMM [ 0 ], y+self.m_DrawMargineMM [ 1 ], w, h ) 
 
-    def DrawWall ( self, dc, wall, type ):
-        found = False
-        ( x, y, w, h ) = wall
+    ########################################################################
+    # Methods for drawing
+    ########################################################################
+    def DrawWall ( self, wall, type, redraw = True ):
+        colors = self.m_Colors
+        color = None 
+        fcolor = None 
+        lstyle = None
+        fstyle = None
         if type == WALL_NONE:
-            dc.SetPen(wx.BLACK_PEN)
-            dc.SetBrush(wx.BLACK_BRUSH)
+            pass
         elif type == WALL_EXIST:
-            dc.SetPen(wx.GREEN_PEN)
-            dc.SetBrush(wx.TRANSPARENT_BRUSH)
+            color = colors [ 'WallExist']
+            lstyle = 'Solid'
         elif type == WALL_DETECTED:
-            dc.SetPen(wx.RED_PEN)
-            dc.SetBrush(wx.RED_BRUSH)
+            fcolor = color = colors [ 'WallDetected']
+            fstyle = lstyle = 'Solid'
         else:
+            self.Log ( "Unknown wall type" )
             return
         
-        dc.DrawRectangle ( x+self.m_DrawMargineMM [ 0 ], y+self.m_DrawMargineMM [ 1 ], w, h ) 
+        wall.SetLineColor ( color ) 
+        wall.SetLineStyle ( lstyle ) 
+        wall.SetFillColor ( fcolor )
+        wall.SetFillStyle ( fstyle )
 
-    def DrawAllWalls ( self, dc ):
-        for idx in range ( len ( self.m_MazeWalls ) ) :
-            self.DrawWall( dc, self.m_Walls [ idx ], self.m_MazeWalls[ idx ] ) 
-        # self.m_Mouse.DrawMouse ( dc, self.m_DrawMargineMM )
+        if redraw:
+            self.Canvas.Draw ( )
 
-    def SetKnownWall(self):
-        for y in range ( 0, self.m_YCnt ):
-            self.SetWall( 0, y, WALL_LU_W, WALL_DETECTED )
-            self.SetWall( self.m_XCnt-1, y, WALL_LU_E, WALL_DETECTED )
-            
-        for x in range ( 0, self.m_XCnt ):
-            self.SetWall( x, 0, WALL_LU_S, WALL_DETECTED )
-            self.SetWall( x, self.m_YCnt-1, WALL_LU_N, WALL_DETECTED )
+    def DrawAllWalls ( self, redraw = True ):
+        walls = self.m_Walls
+        for idx in range ( len ( self.m_TypeWalls ) ) :
+            self.DrawWall( walls [ idx ], self.m_TypeWalls[ idx ], False ) 
+
+        if redraw:
+            self.Canvas.Draw ( )
+
+    def DrawMouse( self, pos, angle, redraw = True ):
+        img = self.m_MouseImage
+        if not img:
+            return
+
+        pos = ( self.m_MousePos [ 0 ], self.m_MousePos [ 1 ] + 5 )
+
+        size = self.m_MouseSize 
+        obj = self.m_MouseObject
+
+        if angle != self.m_MouseAngle:
+            img = img.Rotate ( angle, pos )
+            self.m_MouseAngle = angle
+            if obj: 
+                self.Canvas.RemoveObject ( obj )
+                obj = None
+
+        bmp = img.ConvertToBitmap() 
+        if not obj:
+            obj = self.m_MouseObject = self.Canvas.AddScaledBitmap ( bmp, pos, Height = size [ 1 ], Position = "cc", InForeground = True)
+        else:
+            obj.SetPoint ( pos )
+
+        self.m_MousePos = pos
+
+        if redraw:
+            self.Canvas.Draw ( )
+
+    def DrawMaze ( self ):
+        self.InitMouse ()
+        self.DrawAllWalls ( False )
+        self.DrawMouse ( self.m_MousePos, self.m_MouseAngle, False )
+        self.Canvas.ZoomToBB()
 
     def DrawUpdatedWall(self, dc, x, y):
         self.DrawWall ( x, y, self.GetWallData(x, y) )
 
-    def OnSize(self, event):
-        (w, h) = event.GetSize();
-        (w, h) = ( float ( w ), float ( h ) )
-        ( wmm, hmm ) = ( float ( self.m_MaxW ), float ( self.m_MaxH ) )
-        margine = float ( self.m_DrawMargine ) 
+    ########################################################################
+    # Methods for changing maze setting
+    ########################################################################
+    def GetMaze ( self ): 
+        return ( self.m_MazeSize,
+                 self.m_BlockWidth,
+                 self.m_PollWidth,
+                 self.m_MousePosInit,
+                 self.m_MouseSize )
 
-        w_margine = w - margine * 2 
-        h_margine = h - margine * 2  
-        scaleX = w_margine / wmm
-        scaleY = h_margine / hmm
+    def SetMaze ( self, maze_size, wblock, wpoll, mouse_pos, mouse_size ): 
+        self.m_MazeSize = maze_size
+        self.m_BlockWidth = wblock 
+        self.m_PollWidth  = wpoll 
 
-        if scaleX <= scaleY:
-            margineMM = ( ( h / scaleX ) - hmm ) / 2
-            self.m_DrawMargineMM = ( 
-                    margine / scaleX, 
-                    margineMM)
+        self.m_MousePosInit = mouse_pos
+        self.m_MouseSize = mouse_size
+
+        # init maze
+        ( w, h ) = self.m_MazeSize
+        self.m_MaxW = float(self.m_BlockWidth * w + self.m_PollWidth)
+        self.m_MaxH = float(self.m_BlockWidth * h + self.m_PollWidth)
+
+        self.InitMaze ()
+        self.DrawMaze () 
+
+    ########################################################################
+    # Methods for reading maze file
+    ########################################################################
+    def SetMazeFromFileData ( self, maze ): 
+        self.SetAllWall( WALL_NONE )
+
+        for idx in range ( len ( maze ) ) :
+            pos = self.GetCellPosFromFileIndex ( idx )
+            if maze [ idx ] & WALL_W: 
+                self.SetWall ( pos, WALL_LU_W, WALL_EXIST )
+            if maze [ idx ] & WALL_S: 
+                self.SetWall ( pos, WALL_LU_S, WALL_EXIST )
+            if maze [ idx ] & WALL_E:
+                self.SetWall ( pos, WALL_LU_E, WALL_EXIST )
+            if maze [ idx ] & WALL_N:
+                self.SetWall ( pos, WALL_LU_N, WALL_EXIST )
+
+        self.SetKnownWall()
+
+    def LoadMazeFile ( self, path ): 
+        (w, h) = self.m_MazeSize
+        try:
+            f = open(path, "rb")
+        except:
+            msg = "Openning '" + path + "' failed!"
+            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
+            dlg.ShowModal()
+            dlg.Destroy()
+            return 0
+
+        try:
+            maze = array ( 'B' )
+            maze.fromfile ( f, w * h ) 
+        except:
+            msg = "Reading '" + path + "' failed!"
+            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
+            dlg.ShowModal()
+            dlg.Destroy()
+            f.close()
+            return 0
+        f.close()
+
+        if len ( maze ) != w * h:
+            msg = "File size is so short. check maze file!"
+            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
+            dlg.ShowModal()
+            dlg.Destroy()
         else:
-            margineMM = ( ( w / scaleY ) - wmm ) / 2
-            self.m_DrawMargineMM = ( 
-                    margineMM, 
-                    margine / scaleY ) 
+            name = path.replace ( '\\', '/' )
+            name = name.split ( '/' ) [-1]
+            wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None ).SetTitle ( AppTitle + '(' + name + ')' )
+            #print maze
+            self.SetMazeFromFileData ( maze ) 
+            self.DrawMaze ()
+            self.m_MazeFile = maze
 
-        self.m_Scale = (min(scaleX, scaleY), min(scaleX, scaleY))
-
-        self.m_Redraw = True;
-        # print "OnSize: scale=", self.m_Scale 
+    ########################################################################
+    # Methods for others 
+    ########################################################################
+    def OnSize(self, event):
+        pass
 
     def OnPaint(self, evt):
-        dc = wx.PaintDC(self)
-        # print "OnPaint: clip=", dc.GetClippingBox ()
-        dc.Clear()
-        dc.SetUserScale ( self.m_Scale [ 0 ],  self.m_Scale [ 1 ])
-        self.DrawAllPolls (dc)
-        self.DrawAllWalls (dc)
+        pass
 
     def OnNCPaint(self, evt):
-        dc = wx.PaintDC(self)
-        # print "OnNCPaint: size=", dc.GetSize () 
+        pass
+
 
 #---------------------------------------------------------------------------
 # Setting dialog
@@ -559,11 +662,11 @@ class ControlPanel(wx.Panel):
 
             if dlg.ShowModal() == wx.ID_OK:
                 paths = dlg.GetPaths()
-                self.m_Maze.LoadMaze ( paths [ 0 ] )
+                self.m_Maze.LoadMazeFile ( paths [ 0 ] )
 
             dlg.Destroy()
         else:
-            self.m_Maze.LoadMaze ( path )
+            self.m_Maze.LoadMazeFile ( path )
 
     def Setting(self):
         dlg = SettingDialog ( self, self.m_Maze )
@@ -575,7 +678,7 @@ class ControlPanel(wx.Panel):
             flist = os.listdir(path)
         except:
             msg = "'maze' directory is not fond. please make 'maze' directory!"
-            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMaze', wx.OK | wx.ICON_ERROR )
+            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
             dlg.ShowModal()
             dlg.Destroy()
             return;
@@ -594,11 +697,6 @@ class ControlPanel(wx.Panel):
                     self.maze_list.InsertStringItem (0, next [ l+1: ] )
 
     def LoadMazeList(self):
-        # self.maze_list.ClearAll ()
-        # self.maze_list.InsertColumn ( 0, "" )
-        # li = self.maze_list.GetColumn ( 0 )
-        # li.Clear ()
-        # self.maze_list.SetColumn ( 0, li )
         self.maze_list.DeleteAllItems()
         self.FilesInDir(self.m_Path)
         self.maze_list.GetItemCount ()
@@ -622,10 +720,11 @@ class ControlPanel(wx.Panel):
     def OnClickRunPause(self, event):
         print "run/pause"
         maze = self.m_Maze
-        _mouse = maze.m_Mouse
-        _mouse.CommandMouse ( mouse.MOUSE_CMD_TEST ) 
+        maze.DrawMouse ( ( 30, 200 ), radians ( 0 ) )
         
     def OnClickStopMouse(self, event):
+        maze = self.m_Maze
+        maze.DrawMouse ( ( 30, 300 ), radians ( 45 ) )
         print "stop mouse"
 
     def OnClickSetting(self, event):
@@ -650,6 +749,14 @@ class ControlPanel(wx.Panel):
 class LogPanel(wx.Panel):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
         wx.Panel.__init__(self, parent, ID, style=style)
+
+        sizer = wx.BoxSizer ( wx.HORIZONTAL )
+        self.MsgWindow = wx.TextCtrl ( 
+                self, wx.ID_ANY,
+                style = (wx.TE_MULTILINE | wx.TE_READONLY | wx.SUNKEN_BORDER | wx.HSCROLL ) )
+        sizer.Add ( self.MsgWindow, 1, wx.EXPAND )
+        self.SetSizer ( sizer )
+        
 
 #---------------------------------------------------------------------------
 # Frame
@@ -691,6 +798,7 @@ class AppFrame(wx.Frame):
         splitter_main.SplitHorizontally(splitter, panel_log, frame_size_y)
         splitter_main.SetSashGravity ( 1 )
         splitter_main.SetMinimumPaneSize(60)
+        self.LogPanel = panel_log
 
         
         # create panel
@@ -699,6 +807,7 @@ class AppFrame(wx.Frame):
         splitter.SplitVertically(panel_maze, panel_ctl, frame_size_x)
         splitter.SetSashGravity ( 1 )
         splitter.SetMinimumPaneSize(180)
+        self.panel_maze = panel_maze 
 
         # set frame at center
         self.Center()
@@ -719,6 +828,12 @@ class AppFrame(wx.Frame):
 
     def CloseWindow(self, event):
         self.Close()
+    
+    def Log(self, text):
+        self.LogPanel.MsgWindow.AppendText(text)
+        if not text[-1] == "\n":
+            self.LogPanel.MsgWindow.AppendText("\n")
+        print text
         
     def OnKeyDown(self, evt):
         keycode = evt.GetKeyCode()
@@ -733,6 +848,7 @@ class AppMain(wx.App):
         frame = AppFrame(None, AppTitle)
         self.SetTopWindow(frame)
         frame.Show(True)
+        frame.panel_maze.PostInit ( )
         return True
 
 #---------------------------------------------------------------------------
