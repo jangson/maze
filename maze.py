@@ -17,6 +17,7 @@ from    array import *
 from    math  import *
 import  re
 import  thread
+from    scipy import integrate
 
 import  wx
 import  wx.lib.newevent
@@ -24,6 +25,47 @@ import  wx.lib.masked           as masked
 import  wx.lib.rcsizer          as rcs
 
 import  mouse
+
+#-------------------------------------------------------------------------------
+# Test thread for Mouse movement
+#-------------------------------------------------------------------------------
+
+(evtEVT_MOUSE_COMMAND, EVT_MOUSE_COMMAND)   = wx.lib.newevent.NewEvent()
+(evtEVT_MOUSE_MOVE, EVT_MOUSE_MOVE)         = wx.lib.newevent.NewEvent()
+
+class ThreadMouse():
+    def __init__(self, parent):
+        self.parent = parent
+        self.mouse = parent.m_Mouse
+        self.keepGoing = self.running = False
+
+    def Start(self, cmd):
+        print "### Thread start ###"
+        self.keepGoing = self.running = True
+        thread.start_new_thread(self.Run, ( cmd, ) )
+
+    def Stop(self):
+        self.keepGoing = False
+
+    def IsRunning(self):
+        return self.running
+    
+    def Run(self, cmd):
+        print "### Mouse cmd ###"
+        while self.keepGoing:
+            self.mouse.Run()
+            self.Stop ()
+
+        self.running = False
+        print "### Thread exit ###" 
+
+
+#-------------------------------------------------------------------------------
+# Maze Panel 
+#-------------------------------------------------------------------------------
+
+USE_MOUSE_IMAGE = False
+DRAW_MOUSE = True
 
 # .maz file format description
 # Using one byte per block. Bit description is below.
@@ -53,8 +95,11 @@ WALL_LU_S   = 1
 WALL_LU_E   = 2
 WALL_LU_N   = 3
 
-# Default mouse definition
-MOUSE_SIZE      = ( 60, 80 )
+# Default size 
+MAZE_SIZE           = ( 16, 16 )
+MAZE_BLOCK_WIDTH    = 0.180   # 180 milimeter
+MAZE_POLL_WIDTH     = 0.012   # Real size is 12 mm
+MOUSE_SIZE          = ( 0.060, 0.080 )
 
 NAZE_COLORS = {
         'Background'        : ( 20, 20, 20 ),
@@ -64,15 +109,6 @@ NAZE_COLORS = {
         'WallDetected'      : 'Red'
 } 
 
-#---------------------------------------------------------------------------
-# Maze Panel 
-# class Wall(wx.Window):
-    # def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
-    
-
-
-#---------------------------------------------------------------------------
-# Maze Panel 
 try:
     from floatcanvas import NavCanvas, FloatCanvas, Resources
 except ImportError: # if it's not there locally, try the wxPython lib.
@@ -84,13 +120,15 @@ class MazePanel(NavCanvas.NavCanvas):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
         NavCanvas.NavCanvas.__init__(self, parent, -1, style=style, BackgroundColor = ( 20, 20, 20 ) )
 
+        # mouse
+        self.m_Mouse = mouse.Mouse(self) 
 
         # Init default maze variables
         self.m_Parent = parent
         self.m_Colors = NAZE_COLORS
-        self.m_MazeSize = ( 16, 16 )
-        self.m_BlockWidth = 180   # 180 milimeter
-        self.m_PollWidth  = 12    # Real size is 12 mm
+        self.m_MazeSize = MAZE_SIZE
+        self.m_BlockWidth = MAZE_BLOCK_WIDTH
+        self.m_PollWidth  = MAZE_POLL_WIDTH
 
         # Initialize maze
         ( w, h ) = self.m_MazeSize
@@ -103,45 +141,35 @@ class MazePanel(NavCanvas.NavCanvas):
         self.InitMaze ()
 
         # mouse
-        self.m_Mouse = mouse.Mouse(self) 
         size = MOUSE_SIZE
         way = self.m_BlockWidth - self.m_PollWidth  
         pos = ( way/2+self.m_PollWidth, way/2+self.m_PollWidth )
 
         self.m_MouseSize = size
-        self.m_MousePosInit = self.m_MousePos = pos
+        self.m_MousePos = pos
         self.m_MouseAngle = radians(0)
-        self.m_Mouse.SetMousePos ( self.m_MousePos  ) 
-        self.m_Mouse.SetMouseSize ( self.m_MouseSize  ) 
-        self.m_MouseImage = None
-        self.m_MouseObject = None
-        self.InitMouse () 
+
+        # creating test thread 
+        self.Thread = ThreadMouse ( self )
 
         # Setup panel
         # self.Bind(wx.EVT_SIZE, self.OnSize)
         # self.Bind(wx.EVT_PAINT, self.OnPaint)
         # self.Bind(wx.EVT_NC_PAINT, self.OnNCPaint)
-
-        # screen scale
-        self.m_Redraw = True;
-        self.m_Scale = None
+        self.Canvas.Bind(FloatCanvas.EVT_MOTION, self.OnMove) 
         
     def Log ( self, text ):
         log = wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None )
         log.Log ( text )
             
+
     ########################################################################
     # Methods for initialization
     ########################################################################
-    def InitMouse ( self ):
-        self.m_MousePos = self.m_MousePosInit
-        pass
-        
     def InitMaze ( self ):
         self.m_Polls = []
         self.m_Walls, self.m_LookupWall = [], []
         self.m_TypeWalls = []
-        self.m_MouseObject = None
         self.Canvas.InitAll()
         w = self.m_BlockWidth / 3
         color = self.m_Colors['MazeBorder']
@@ -150,24 +178,26 @@ class MazePanel(NavCanvas.NavCanvas):
                 ( self.m_MaxW, self.m_MaxH ), 
                 LineColor = color, 
                 LineWidth = 1, 
-                FillColor = None )
+                FillColor = None,
+                InForeground = False
+                )
 
         self.m_Polls = self.MakePolls ()
         ( self.m_Walls, self.m_LookupWall ) = self.MakeWalls ()
         self.m_TypeWalls = [ WALL_NONE ] * len(self.m_Walls)  
         self.SetKnownWall()
+        self.InitMouse ()
 
-    def LoadMouseImage ( self, filename = "mouse.png" ):
-        size = self.m_MouseSize 
-        bmp = wx.Bitmap( filename )        
-        img = bmp.ConvertToImage()
-        img.Rescale ( size [ 0 ] , size [ 1 ] )
-        self.m_MouseImage = img 
-        
-    # This methos have to call after all class initialzed because DrawMouse() required it
+    def InitMouse ( self ):
+        self.m_Mouse.InitMouse()
+
+    def ResetMouse ( self ):
+        self.m_Mouse.SetMouse(self.m_MousePos, self.m_MouseAngle)
+
     def PostInit ( self ):
-        self.LoadMouseImage ()
         self.DrawMaze ()
+        pass
+
 
     ########################################################################
     # Methods for Making wall, poll
@@ -341,42 +371,14 @@ class MazePanel(NavCanvas.NavCanvas):
         if redraw:
             self.Canvas.Draw ( )
 
-    def DrawMouse( self, pos, angle, redraw = True ):
-        img = self.m_MouseImage
-        if not img:
-            return
-
-        pos = ( self.m_MousePos [ 0 ], self.m_MousePos [ 1 ] + 5 )
-
-        size = self.m_MouseSize 
-        obj = self.m_MouseObject
-
-        if angle != self.m_MouseAngle:
-            img = img.Rotate ( angle, pos )
-            self.m_MouseAngle = angle
-            if obj: 
-                self.Canvas.RemoveObject ( obj )
-                obj = None
-
-        bmp = img.ConvertToBitmap() 
-        if not obj:
-            obj = self.m_MouseObject = self.Canvas.AddScaledBitmap ( bmp, pos, Height = size [ 1 ], Position = "cc", InForeground = True)
-        else:
-            obj.SetPoint ( pos )
-
-        self.m_MousePos = pos
-
-        if redraw:
-            self.Canvas.Draw ( )
-
     def DrawMaze ( self ):
-        self.InitMouse ()
         self.DrawAllWalls ( False )
-        self.DrawMouse ( self.m_MousePos, self.m_MouseAngle, False )
+        self.ResetMouse ()
         self.Canvas.ZoomToBB()
 
     def DrawUpdatedWall(self, dc, x, y):
         self.DrawWall ( x, y, self.GetWallData(x, y) )
+
 
     ########################################################################
     # Methods for changing maze setting
@@ -385,7 +387,7 @@ class MazePanel(NavCanvas.NavCanvas):
         return ( self.m_MazeSize,
                  self.m_BlockWidth,
                  self.m_PollWidth,
-                 self.m_MousePosInit,
+                 self.m_MousePos,
                  self.m_MouseSize )
 
     def SetMaze ( self, maze_size, wblock, wpoll, mouse_pos, mouse_size ): 
@@ -393,7 +395,6 @@ class MazePanel(NavCanvas.NavCanvas):
         self.m_BlockWidth = wblock 
         self.m_PollWidth  = wpoll 
 
-        self.m_MousePosInit = mouse_pos
         self.m_MouseSize = mouse_size
 
         # init maze
@@ -403,6 +404,7 @@ class MazePanel(NavCanvas.NavCanvas):
 
         self.InitMaze ()
         self.DrawMaze () 
+
 
     ########################################################################
     # Methods for reading maze file
@@ -460,9 +462,22 @@ class MazePanel(NavCanvas.NavCanvas):
             self.DrawMaze ()
             self.m_MazeFile = maze
 
+
     ########################################################################
     # Methods for others 
     ########################################################################
+    def RunPauseMouse(self):
+        thread = self.Thread
+
+        if thread.IsRunning (): 
+            thread.Stop ()
+            wait = 50 # wait for 5 seconds
+            while wait and thread.IsRunning () :
+                time.sleep ( 0.1 )
+                wait = wait - 1
+        else:
+            thread.Start ( 5 )
+
     def OnSize(self, event):
         pass
 
@@ -472,8 +487,13 @@ class MazePanel(NavCanvas.NavCanvas):
     def OnNCPaint(self, evt):
         pass
 
+    def OnMove(self, event):
+        frame = wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None )
+        frame.SetStatusText("%.2f, %.2f"%tuple(event.Coords))
+        event.Skip()
 
-#---------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
 # Setting dialog
 class SettingDialog(wx.Dialog):
     def __init__(
@@ -596,7 +616,7 @@ class SettingDialog(wx.Dialog):
         else:
             evt.Skip ()
 
-#---------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Control and Information Pannel 
 ID_BUTTON_START     = 10
 ID_BUTTON_STOP      = 20
@@ -718,13 +738,10 @@ class ControlPanel(wx.Panel):
             # self.OnClickSetting(self, None)
 
     def OnClickRunPause(self, event):
-        print "run/pause"
         maze = self.m_Maze
-        maze.DrawMouse ( ( 30, 200 ), radians ( 0 ) )
+        maze.RunPauseMouse()
         
     def OnClickStopMouse(self, event):
-        maze = self.m_Maze
-        maze.DrawMouse ( ( 30, 300 ), radians ( 45 ) )
         print "stop mouse"
 
     def OnClickSetting(self, event):
@@ -739,12 +756,20 @@ class ControlPanel(wx.Panel):
         self.OpenMaze(path)
 
     def OnCloseApp(self, event):
+        if thread.IsRunning (): 
+            thread.Stop ()
+
+            wait = 50 # wait for 5 seconds
+            while wait and thread.IsRunning () :
+                time.sleep ( 0.1 )
+                wait = wait - 1
+
         evt = wx.CloseEvent(wx.wxEVT_CLOSE_WINDOW)
         wx.PostEvent(self.GetParent().GetParent(), evt)
     
 
 
-#---------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Control and Information Pannel 
 class LogPanel(wx.Panel):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
@@ -758,7 +783,7 @@ class LogPanel(wx.Panel):
         self.SetSizer ( sizer )
         
 
-#---------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Frame
 ID_WINDOW_TOP_LEVEL= 1
 ID_WINDOW_CONTROL  = 10
@@ -839,7 +864,7 @@ class AppFrame(wx.Frame):
         keycode = evt.GetKeyCode()
         print "Frame KeyDown=", keycode
 
-#---------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Application
 AppTitle = "GSDSim3 Micro Mouse Simulator"
 
@@ -851,7 +876,7 @@ class AppMain(wx.App):
         frame.panel_maze.PostInit ( )
         return True
 
-#---------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 if __name__ == '__main__':
     app = AppMain(redirect=False)
     app.MainLoop()
