@@ -88,7 +88,12 @@ NAZE_COLORS = {
 
 class MazePanel(mycanvas.NavCanvas):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
-        mycanvas.NavCanvas.__init__(self, parent, -1, style=style, BackgroundColor = ( 20, 20, 20 ) )
+        mycanvas.NavCanvas.__init__(self, parent, ID, style=style, BackgroundColor = ( 20, 20, 20 ) )
+
+        self.Log = wx.FindWindowById ( ID_WINDOW_LOG )
+        if self.Log:
+            self.Log = self.Log.Log
+
         self.m_Parent = parent
 
         path = os.getcwd()
@@ -143,11 +148,19 @@ class MazePanel(mycanvas.NavCanvas):
         self.Canvas.Bind ( wx.EVT_LEFT_DOWN, self.LeftDownEvent )
         self.Canvas.Bind ( wx.EVT_LEFT_UP, self.LeftUpEvent )
         
+        self.m_Control = ControlPanel ( self, self, ID_WINDOW_CONTROL )
 
-    def Log ( self, text ):
-        log = wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None )
-        log.Log ( text )
-            
+        ## Create the vertical sizer for the toolbar and Panel
+        ## moved from navcanvas because ControlPanel
+        box = wx.BoxSizer(wx.VERTICAL)
+        box.Add(self.ToolBar, 0, wx.ALL | wx.ALIGN_LEFT | wx.GROW, 4)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        hbox.Add ( self.Canvas, 1, wx.GROW )
+        hbox.Add ( self.m_Control, 0, wx.ALIGN_RIGHT | wx.GROW )
+        
+        box.Add(hbox, 1, wx.GROW)
+        self.SetSizer(box)
 
     ########################################################################
     # Methods for initialization
@@ -157,16 +170,6 @@ class MazePanel(mycanvas.NavCanvas):
         self.m_Walls, self.m_LookupWall = [], []
         self.m_TypeWalls = []
         self.Canvas.InitAll()
-        w = self.m_BlockWidth / 3
-        color = self.m_Colors['MazeBorder']
-        obj = self.Canvas.AddRectangle ( 
-                ( 0, 0 ), 
-                ( self.m_MaxW, self.m_MaxH ), 
-                LineColor = color, 
-                LineWidth = 1, 
-                FillColor = None,
-                InForeground = False
-                )
 
         self.m_Polls = self.MakePolls ()
         self.m_Walls = []
@@ -217,8 +220,6 @@ class MazePanel(mycanvas.NavCanvas):
 
     def PostInit ( self ):
         self.DrawMaze ()
-        pass
-
 
     ########################################################################
     # Methods for Making wall, poll
@@ -645,6 +646,38 @@ class MazePanel(mycanvas.NavCanvas):
     ########################################################################
     # Methods for changing maze setting
     ########################################################################
+    def GetMazeSettings ( self ): 
+        settings = ( 
+            # type, range, name, description
+            ( 'MazeSize',   ( 4, 64 ),     'Maze size W,H',    'Width and height of Maze (4~64)' ),
+            ( 'Integer',    ( 50, 300 ),   'Block Width',      'One Block width of maze (50~300mm)' ),
+            ( 'Integer',    ( 4, 30 ),     'Wall thick',       'Thick of wall (4~30mm)' ),
+            ( 'Position',   ( 1, 1 ),      'Start X,Y',        'X,Y for starting postion in maze' ),
+            ( 'Position',   ( 0, 0 ),      'Target X,Y',       'X,Y for target postion in maze(0,0 is none)' ),
+            ( 'Position',   ( 1, 1 ),      'Target area X,Y',  'X,Y for start of target section in maze' ),
+            ( 'Position',   ( 1, 1 ),      'Target area X,Y',  'X,Y for end of target section in maze' ),
+        )
+        def CvrtX (x):
+            if x == 255:
+                return 0
+            return ( x + 1 )
+        values = (
+            self.m_MazeSize [ 0 ],
+            self.m_MazeSize [ 1 ],
+            self.m_BlockWidth * 1000,
+            self.m_PollWidth * 1000,
+            CvrtX ( self.m_StartXY [ 0 ] ),
+            CvrtX ( self.m_StartXY [ 1 ] ),
+            CvrtX ( self.m_TargetXY [ 0 ] ),
+            CvrtX ( self.m_TargetXY  [ 1 ] ),
+            CvrtX ( self.m_TargetSection [ 0 ] [ 0 ] ),
+            CvrtX ( self.m_TargetSection [ 0 ] [ 1 ] ),
+            CvrtX ( self.m_TargetSection [ 1 ] [ 0 ] ),
+            CvrtX ( self.m_TargetSection [ 1 ] [ 1 ] ),
+        )
+        return ( settings, values )
+
+
     def GetMaze ( self ): 
         maze_size = self.m_MazeSize
         wblock = self.m_BlockWidth * 1000
@@ -1294,15 +1327,86 @@ class SettingDialog(wx.Dialog):
             evt.Skip ()
 
 #-------------------------------------------------------------------------------
+# Setting panel
+class SettingPanel(wx.Panel):
+    def __init__( self, parent, maze, ID=wx.ID_ANY ):
+        wx.Panel.__init__ ( self, parent, ID )
+
+        self.Log = wx.FindWindowById ( ID_WINDOW_LOG )
+        if self.Log:
+            self.Log = self.Log.Log
+
+        self.Maze = wx.FindWindowById ( ID_WINDOW_MAZE )
+
+        ( settings, values ) = maze.GetMazeSettings ()
+        self.Values = values
+        self.InitSettings ( settings, values )
+
+    def InitSettings ( self, settings, values ):
+        edit_limited = False
+        values = list ( values )
+        controls = []
+        gs = wx.GridBagSizer ( 10, 10 )
+        row = 0
+        for ( type, limit, name, des ) in settings:
+
+            sizer = wx.BoxSizer ( wx.HORIZONTAL )
+
+            if type == 'MazeSize':
+                self.MazeWidth = values [ 0 ]
+                self.MazeHeight = values [ 1 ]
+
+                edit = masked.NumCtrl (self,  value=values [ 0 ], min=limit [ 0 ], max=limit [ 1 ], limited=edit_limited, integerWidth=3, allowNegative=False)
+                del values [ 0 ]
+                controls.append ( edit )
+                sizer.Add ( edit, 0, wx.ALIGN_LEFT )
+                sizer.AddSpacer ( 5 )
+
+            if type == 'Integer':
+                pass
+
+            if type == 'Position':
+                limit = ( 0, self.MazeWidth )
+
+                edit = masked.NumCtrl (self,  value=values [ 0 ], min=limit [ 0 ], max=limit [ 1 ], limited=edit_limited, integerWidth=3, allowNegative=False)
+                del values [ 0 ]
+                controls.append ( edit )
+                sizer.Add ( edit, 0, wx.ALIGN_LEFT )
+                sizer.AddSpacer ( 5 )
+
+                limit = ( 0, self.MazeHeight )
+
+            if type == 'Description':
+                description =  wx.StaticText ( self, - 1, des ) 
+                gs.Add ( description, ( row, 0 ), ( 1, 3 ), flag = wx.ALIGN_CENTRE_VERTICAL )
+            else:
+                edit = masked.NumCtrl (self,  value=values [ 0 ], min=limit [ 0 ], max=limit [ 1 ], limited=edit_limited, integerWidth=3, allowNegative=False)
+                del values [ 0 ]
+                controls.append ( edit )
+                sizer.Add ( edit, 0, wx.ALIGN_LEFT )
+                title =  wx.StaticText ( self, - 1, name ) 
+                description =  wx.StaticText ( self, - 1, des ) 
+
+                gs.Add ( title, ( row, 0 ), flag = wx.ALIGN_RIGHT | wx.ALIGN_CENTRE_VERTICAL )
+                gs.Add ( sizer, ( row, 1 ), flag = wx.ALIGN_CENTRE_VERTICAL )
+                gs.Add ( description, ( row, 2 ), flag = wx.ALIGN_CENTRE_VERTICAL )
+
+            row = row + 1
+
+        s = wx.BoxSizer (wx.HORIZONTAL)
+        s.Add ( gs, 1, wx.EXPAND | wx.ALL, 20 )
+        self.SetSizer ( s )
+
+#-------------------------------------------------------------------------------
 # Control and Information Pannel 
-ID_BUTTON_START     = 10
-ID_BUTTON_STOP      = 20
-ID_BUTTON_SETTING   = 30
-ID_BUTTON_LOAD_MAZE = 40
+ID_BUTTON_START     = 100
+ID_BUTTON_STOP      = 101
+ID_BUTTON_LOAD_MAZE = 102
 
 class ControlPanel(wx.Panel):
     def __init__(self, parent, maze, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
         wx.Panel.__init__(self, parent, ID, style=style)
+        self.m_Log = wx.FindWindowById ( ID_WINDOW_LOG )
 
         self.m_Parent = parent
         self.m_Maze = maze
@@ -1310,18 +1414,14 @@ class ControlPanel(wx.Panel):
         self.m_Path = os.path.join(path, "maze")
 
         gs = wx.FlexGridSizer ( 5, 1 )
-        b = wx.Button ( self, ID_BUTTON_START, "&Run/Pause mouse" )
+        b = wx.Button ( self, ID_BUTTON_START, "&Run/Pause" )
         
         self.Bind(wx.EVT_BUTTON, self.OnClickRunPause, b)
         gs.Add ( b, 0, wx.EXPAND )
         gs.SetItemMinSize ( 0, 1, 50 )
 
-        b = wx.Button ( self, ID_BUTTON_STOP, "&Stop mouse" )
+        b = wx.Button ( self, ID_BUTTON_STOP, "&Stop" )
         self.Bind(wx.EVT_BUTTON, self.OnClickStopMouse, b)
-        gs.Add ( b, 0, wx.EXPAND )
-
-        b = wx.Button ( self, ID_BUTTON_SETTING, "&Setting" )
-        self.Bind(wx.EVT_BUTTON, self.OnClickSetting, b)
         gs.Add ( b, 0, wx.EXPAND )
 
         self.maze_list = wx.ListCtrl(self, -1, style = wx.LC_REPORT | wx.LC_NO_HEADER | wx.LC_SINGLE_SEL | wx.LC_SORT_ASCENDING )
@@ -1335,7 +1435,7 @@ class ControlPanel(wx.Panel):
         gs.Add ( b, 0, wx.EXPAND )
 
         gs.AddGrowableCol(0)
-        gs.AddGrowableRow(3)
+        gs.AddGrowableRow(2)
 
         self.SetSizer( gs )
 
@@ -1416,9 +1516,17 @@ class ControlPanel(wx.Panel):
     def OnCloseApp(self, event):
         evt = wx.CloseEvent(wx.wxEVT_CLOSE_WINDOW)
         wx.PostEvent(self.GetParent().GetParent(), evt)
+        
+#-------------------------------------------------------------------------------
+class MainPanel(wx.Notebook):
+    def __init__ ( self, parent, ID = wx.ID_ANY ):
+        wx.Notebook.__init__ ( self, parent, ID )
+        maze = MazePanel ( self, ID_WINDOW_MAZE )
+        setting = SettingPanel ( self, maze, ID_WINDOW_SETTING )
+
+        self.AddPage ( maze, "Maze" )
+        self.AddPage ( setting, "Setting" )
     
-
-
 #-------------------------------------------------------------------------------
 # log panel 
 class LogPanel(wx.Panel):
@@ -1432,11 +1540,18 @@ class LogPanel(wx.Panel):
         sizer.Add ( self.MsgWindow, 1, wx.EXPAND )
         self.SetSizer ( sizer )
         
+    def Log(self, text):
+        self.MsgWindow.AppendText(text)
+        if not text[-1] == "\n":
+            self.MsgWindow.AppendText("\n")
 
 #-------------------------------------------------------------------------------
 # Frame
 ID_WINDOW_TOP_LEVEL= 1
-ID_WINDOW_CONTROL  = 10
+ID_WINDOW_MAZE     = 2 
+ID_WINDOW_SETTING  = 3
+ID_WINDOW_CONTROL  = 4
+ID_WINDOW_LOG      = 5
 
 ID_MENU_FILE_OPEN   = 100
 ID_MENU_FILE_SETUP  = 101
@@ -1454,65 +1569,52 @@ class AppFrame(wx.Frame):
         menuBar = wx.MenuBar()
 
         # 1st menu from left
-        menu1 = wx.Menu()
-        menu1.Append(ID_MENU_FILE_OPEN, "&Open", "Open Maze")
-        menu1.Append(ID_MENU_FILE_SETUP, "&Setting", "Set up maze") 
-        menu1.Append(ID_MENU_FILE_EXIT, "E&xit", "Exit")
-        menuBar.Append(menu1, "&File")
-        self.SetMenuBar(menuBar)
+        # menu1 = wx.Menu()
+        # menu1.Append(ID_MENU_FILE_OPEN, "&Open", "Open Maze")
+        # menu1.Append(ID_MENU_FILE_SETUP, "&Setting", "Set up maze") 
+        # menu1.Append(ID_MENU_FILE_EXIT, "E&xit", "Exit")
+        # menuBar.Append(menu1, "&File")
+        # self.SetMenuBar(menuBar)
 
         # create status bar
         self.m_status = self.CreateStatusBar(1)
 
         # create splitter
         sty = wx.BORDER_SIMPLE
-        splitter_main = wx.SplitterWindow(self, -1)
+        sp = wx.SplitterWindow ( self )
 
-        splitter = wx.SplitterWindow(splitter_main, -1)
-        panel_log = LogPanel(splitter_main, -1, style=sty)
-        splitter_main.SplitHorizontally(splitter, panel_log, frame_size_y)
-        splitter_main.SetSashGravity ( 1 )
-        splitter_main.SetMinimumPaneSize(60)
-        self.LogPanel = panel_log
-
-        
-        # create panel
-        panel_maze = MazePanel(splitter, -1, style= ( sty | wx.FULL_REPAINT_ON_RESIZE ) )
-        panel_ctl = ControlPanel(splitter, panel_maze, ID_WINDOW_CONTROL, style=sty)
-        splitter.SplitVertically(panel_maze, panel_ctl, frame_size_x)
-        splitter.SetSashGravity ( 1 )
-        splitter.SetMinimumPaneSize(180)
-        self.panel_maze = panel_maze 
+        log = LogPanel(sp, ID_WINDOW_LOG, style=sty)
+        main = MainPanel ( sp )
+        sp.SplitHorizontally(main, log, frame_size_y)
+        sp.SetSashGravity ( 1 )
+        sp.SetMinimumPaneSize(60)
 
         # set frame at center
         self.Center()
 
         # set event handler
-        self.Bind(wx.EVT_MENU, self.OpenFile, id=ID_MENU_FILE_OPEN)
-        self.Bind(wx.EVT_MENU, self.SetupMaze, id=ID_MENU_FILE_SETUP)
-        self.Bind(wx.EVT_MENU, self.CloseWindow, id=ID_MENU_FILE_EXIT)
-        self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
+        # self.Bind(wx.EVT_MENU, self.OpenFile, id=ID_MENU_FILE_OPEN)
+        # self.Bind(wx.EVT_MENU, self.SetupMaze, id=ID_MENU_FILE_SETUP)
+        # self.Bind(wx.EVT_MENU, self.CloseWindow, id=ID_MENU_FILE_EXIT)
+        # self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
 
     def OpenFile(self, event):
-        wnd = wx.FindWindowById ( ID_WINDOW_CONTROL, self )
-        self.panel_maze.FileOpenMaze ()
+        pass
 
     def SetupMaze(self, event):
-        wnd = wx.FindWindowById ( ID_WINDOW_CONTROL, self )
-        wnd.Setting ()
+        pass
 
     def CloseWindow(self, event):
         self.Close()
-    
-    def Log(self, text):
-        self.LogPanel.MsgWindow.AppendText(text)
-        if not text[-1] == "\n":
-            self.LogPanel.MsgWindow.AppendText("\n")
-        print text
         
     def OnKeyDown(self, evt):
         keycode = evt.GetKeyCode()
         print "Frame KeyDown=", keycode
+
+    def PostInit(self):
+        maze = wx.FindWindowById ( ID_WINDOW_MAZE, None )
+        if maze:
+            maze.PostInit ()
 
 #-------------------------------------------------------------------------------
 # Application
@@ -1522,8 +1624,8 @@ class AppMain(wx.App):
     def OnInit(self):
         frame = AppFrame(None, AppTitle)
         self.SetTopWindow(frame)
-        frame.Show(True)
-        frame.panel_maze.PostInit ( )
+        frame.Show (True)
+        frame.PostInit () 
         return True
 
 #-------------------------------------------------------------------------------
