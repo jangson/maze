@@ -86,9 +86,26 @@ NAZE_COLORS = {
         'WallMustExisted'   : 'White',
 } 
 
-class MazePanel(mycanvas.NavCanvas):
-    def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
-        mycanvas.NavCanvas.__init__(self, parent, ID, style=style, BackgroundColor = ( 20, 20, 20 ) )
+class MazePanel(wx.Panel):
+    def __init__(self,
+                   parent,
+                   id = wx.ID_ANY,
+                   size = wx.DefaultSize,
+                   BackgroundColor = ( 20, 20, 20 ),
+                   **kwargs): # The rest just get passed into FloatCanvas
+        wx.Panel.__init__(self, parent, id, size=size)
+
+        self.EditMode = None
+        self.Modes = [
+                ("Pointer",  GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
+                ("Start",    GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
+                ("Target",   GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
+                ("Edit",     GUIMode.GUIMouse(),   wx.Bitmap ( "edit.png" )),
+                ("Erase",    GUIMode.GUIMouse(),   wx.Bitmap ( "erase.png" )),
+                ("Zoom In",  GUIMode.GUIZoomIn(),  Resources.getMagPlusBitmap()),
+                ("Zoom Out", GUIMode.GUIZoomOut(), Resources.getMagMinusBitmap()),
+                ("Pan",      GUIMode.GUIMove(),    Resources.getHandBitmap()),
+                ]
 
         self.Log = wx.FindWindowById ( ID_WINDOW_LOG )
         if self.Log:
@@ -99,6 +116,15 @@ class MazePanel(mycanvas.NavCanvas):
         path = os.getcwd()
         self.m_Path = os.path.join(path, "maze")
 
+        box = wx.BoxSizer(wx.VERTICAL)
+
+        self.BuildToolbar()
+        box.Add(self.ToolBar, 0, wx.ALL | wx.ALIGN_LEFT | wx.GROW, 4)
+
+        sp = wx.SplitterWindow ( self )
+        self.Canvas = mycanvas.MyFloatCanvas ( sp, BackgroundColor = ( 20, 20, 20 ), ** kwargs )
+        self.Canvas.SetMode(self.Modes[0][1])
+
         # mouse
         self.LoadMouseImage ()
         self.m_MousePoly = None
@@ -108,17 +134,17 @@ class MazePanel(mycanvas.NavCanvas):
 
         # Init default maze variables
         self.m_Colors = NAZE_COLORS
-        self.m_MazeSize = MAZE_SIZE
+        self.m_MazeSize = list ( MAZE_SIZE )
         self.m_BlockWidth = MAZE_BLOCK_WIDTH
         self.m_PollWidth  = MAZE_POLL_WIDTH
-        self.m_StartXY = MAZE_START_POSITION
-        self.m_TargetXY = MAZE_TARGET_POSITION
-        self.m_TargetSection = MAZE_TARGET_SECTION
+        self.m_StartXY = list ( MAZE_START_POSITION )
+        self.m_TargetXY = list ( MAZE_TARGET_POSITION )
+        self.m_TargetSection = list ( MAZE_TARGET_SECTION )
 
         # Initialize maze
-        ( w, h ) = self.m_MazeSize
-        self.m_MaxW = float(self.m_BlockWidth * w + self.m_PollWidth)
-        self.m_MaxH = float(self.m_BlockWidth * h + self.m_PollWidth)
+        # ( w, h ) = self.m_MazeSize
+        # self.m_MaxW = float(self.m_BlockWidth * w + self.m_PollWidth)
+        # self.m_MaxH = float(self.m_BlockWidth * h + self.m_PollWidth)
         self.m_Walls = None
         self.m_WallInfos = None
         self.m_WallPoints1 = None
@@ -126,6 +152,7 @@ class MazePanel(mycanvas.NavCanvas):
         self.m_LookupWall = None
         self.m_TypeWalls = None
         self.InitMaze ()
+        self.FileNewMaze () 
 
         # mouse
         size = MOUSE_SIZE
@@ -138,6 +165,8 @@ class MazePanel(mycanvas.NavCanvas):
 
         # others
         self.MouseAutoPaused = False
+        self.ShiftDown = False 
+        self.ControlDown = False 
 
         # Setup panel
         # self.Bind(wx.EVT_SIZE, self.OnSize)
@@ -145,27 +174,27 @@ class MazePanel(mycanvas.NavCanvas):
         # self.Bind(wx.EVT_NC_PAINT, self.OnNCPaint)
         self.Canvas.Bind(FloatCanvas.EVT_MOTION, self.OnMove) 
         self.Canvas.Bind ( wx.EVT_KEY_DOWN, self.OnKeyDown )
+        self.Canvas.Bind ( wx.EVT_KEY_UP, self.OnKeyUp )
         self.Canvas.Bind ( wx.EVT_LEFT_DOWN, self.LeftDownEvent )
         self.Canvas.Bind ( wx.EVT_LEFT_UP, self.LeftUpEvent )
-        
-        self.m_Control = ControlPanel ( self, self, ID_WINDOW_CONTROL )
 
-        ## Create the vertical sizer for the toolbar and Panel
-        ## moved from navcanvas because ControlPanel
-        box = wx.BoxSizer(wx.VERTICAL)
-        box.Add(self.ToolBar, 0, wx.ALL | wx.ALIGN_LEFT | wx.GROW, 4)
+        self.m_Control = ControlPanel ( sp, ID_WINDOW_CONTROL )
+        sp.SplitVertically(self.Canvas, self.m_Control)
+        sp.SetSashGravity ( 1 )
+        sp.SetMinimumPaneSize(200)
 
-        hbox = wx.BoxSizer(wx.HORIZONTAL)
-        hbox.Add ( self.Canvas, 1, wx.GROW )
-        hbox.Add ( self.m_Control, 0, wx.ALIGN_RIGHT | wx.GROW )
-        
-        box.Add(hbox, 1, wx.GROW)
+        box.Add(sp, 1, wx.GROW)
         self.SetSizer(box)
+
 
     ########################################################################
     # Methods for initialization
     ########################################################################
     def InitMaze ( self ):
+        ( w, h ) = self.m_MazeSize
+        self.m_MaxW = float(self.m_BlockWidth * w + self.m_PollWidth)
+        self.m_MaxH = float(self.m_BlockWidth * h + self.m_PollWidth)
+
         self.m_Polls = []
         self.m_Walls, self.m_LookupWall = [], []
         self.m_TypeWalls = []
@@ -182,7 +211,13 @@ class MazePanel(mycanvas.NavCanvas):
         self.m_TypeWalls = [ WALL_UNKNOWN ] * len(self.m_Walls)  
         self.SetKnownWalls()
         self.InitMouse ()
-        self.FileNewMaze () 
+        self.InitCursor ()
+
+    def InitCursor ( self ):
+        Canvas = self.Canvas
+        cw = self.m_BlockWidth / 2
+        self.m_Cursor = Canvas.AddRectangle ( ( 0, 0 ), ( cw, cw ), LineColor = None, FillColor = None, InForeground = True )
+        self.m_CursorRect = [ [ 0, 0 ], [ cw, cw ] ]
 
     def LoadMouseImage ( self, filename = "mouse.png" ):
         if USE_MOUSE_IMAGE:
@@ -191,20 +226,7 @@ class MazePanel(mycanvas.NavCanvas):
             self.m_MouseImage = img 
 
     def InitMouse ( self ):
-        # if self.m_MousePoly:
-            # Canvas.RemoveObject ( self.m_MousePoly )
-            # self.m_MousePoly = None
-            # 
-        # if self.m_MouseObject:
-            # Canvas.RemoveObject ( self.m_MouseObject )
-            # self.m_MouseObject = None
-            # 
-        # if self.m_MouseRoute:
-            # for objs in self.m_MouseRoute:
-                # for obj in objs:
-                    # Canvas.RemoveObject ( obj )
-            # self.m_MouseRoute = []
-
+        self.m_MousePoly = None
         self.m_Mouse.InitMouse()
 
     def ResetMouse ( self ):
@@ -216,7 +238,7 @@ class MazePanel(mycanvas.NavCanvas):
         if target [ 0 ] >= mazesize [ 0 ] or target [ 1 ] >= mazesize [ 1 ]:
             target = None
 
-        self.m_Mouse.SetMouse(self.m_MousePos, self.m_MouseAngle, self.m_BlockWidth, self.m_PollWidth, start, target, target_section, drawtime = 0.04)
+        self.m_Mouse.SetMouse(self.m_MazeSize, self.m_MousePos, self.m_MouseAngle, self.m_BlockWidth, self.m_PollWidth, start, target, target_section, drawtime = 0.04)
 
     def PostInit ( self ):
         self.DrawMaze ()
@@ -327,8 +349,8 @@ class MazePanel(mycanvas.NavCanvas):
         self.m_WallInfos.append ( info )
         self.m_WallPoints1.append ( point )
         self.m_WallPoints2.append ( point2 )
-        wall.Bind(FloatCanvas.EVT_FC_LEFT_DOWN, self.OnWallClick)
-        wallline.Bind(FloatCanvas.EVT_FC_LEFT_DOWN, self.OnWallClick)
+        # wall.Bind(FloatCanvas.EVT_FC_LEFT_DOWN, self.OnClickWall)
+        # wallline.Bind(FloatCanvas.EVT_FC_LEFT_DOWN, self.OnClickWall)
         
     
     def MakeWalls ( self ): 
@@ -421,7 +443,15 @@ class MazePanel(mycanvas.NavCanvas):
 
     def GetAllWalls ( self ):
         return self.m_TypeWalls
-    
+
+    def ResetAllWall  ( self ):
+        for index in range ( len ( self.m_TypeWalls ) ) :
+            if self.m_TypeWalls [ index ] == WALL_NONE:
+                self.m_TypeWalls [ index ] = WALL_UNKNOWN
+            elif self.m_TypeWalls [ index ] == WALL_DETECTED:
+                self.m_TypeWalls [ index ] = WALL_EXIST
+        self.SetKnownWalls()
+
     def DetectedWall ( self, index, draw = True ):
         walls = self.m_Walls
 
@@ -643,6 +673,24 @@ class MazePanel(mycanvas.NavCanvas):
         if panx or pany:
             self.Canvas.MoveImage( ( panx, pany ), 'World', ReDraw=False)
 
+    def SetCursor ( self, enable, color = "Green" ):
+        self.m_Cursor.Visible = enable
+        self.m_Cursor.SetLineColor ( color ) 
+        self.m_Cursor.SetLineStyle ( "Solid" ) 
+        self.Canvas.Draw ()
+
+    def SetCursorSize ( self, num ): 
+        cw = self.m_BlockWidth / 2 * int ( num )
+        self.m_CursorRect [ 1 ] = [ cw, cw ]
+        self.m_Cursor.SetShape( self.m_CursorRect )
+
+    def MoveCursor ( self, xy ):
+        xy = list ( xy ) 
+        xy = [ xy [ 0 ] - self.m_CursorRect [ 1 ] [ 0 ] / 2, xy [ 1 ] - self.m_CursorRect [ 1 ] [ 1 ] / 2 ]
+        self.m_CursorRect [ 0 ] = list ( xy ) 
+        self.m_Cursor.SetPoint ( self.m_CursorRect [ 0 ] ) 
+        self.Canvas.Draw ()
+
     ########################################################################
     # Methods for changing maze setting
     ########################################################################
@@ -654,10 +702,10 @@ class MazePanel(mycanvas.NavCanvas):
             ( 'Integer',    ( 4, 30 ),     'Wall thick',       'Thick of wall (4~30mm)' ),
             ( 'Position',   ( 1, 1 ),      'Start X,Y',        'X,Y for starting postion in maze' ),
             ( 'Position',   ( 0, 0 ),      'Target X,Y',       'X,Y for target postion in maze(0,0 is none)' ),
-            ( 'Position',   ( 1, 1 ),      'Target area X,Y',  'X,Y for start of target section in maze' ),
-            ( 'Position',   ( 1, 1 ),      'Target area X,Y',  'X,Y for end of target section in maze' ),
+            ( 'Position',   ( 1, 1 ),      'Target area SX,SY',  'X,Y for start of target section in maze' ),
+            ( 'Position',   ( 1, 1 ),      'Target area EX,EY',  'X,Y for end of target section in maze' ),
         )
-        def CvrtX (x):
+        def CvrtPosition (x):
             if x == 255:
                 return 0
             return ( x + 1 )
@@ -666,46 +714,53 @@ class MazePanel(mycanvas.NavCanvas):
             self.m_MazeSize [ 1 ],
             self.m_BlockWidth * 1000,
             self.m_PollWidth * 1000,
-            CvrtX ( self.m_StartXY [ 0 ] ),
-            CvrtX ( self.m_StartXY [ 1 ] ),
-            CvrtX ( self.m_TargetXY [ 0 ] ),
-            CvrtX ( self.m_TargetXY  [ 1 ] ),
-            CvrtX ( self.m_TargetSection [ 0 ] [ 0 ] ),
-            CvrtX ( self.m_TargetSection [ 0 ] [ 1 ] ),
-            CvrtX ( self.m_TargetSection [ 1 ] [ 0 ] ),
-            CvrtX ( self.m_TargetSection [ 1 ] [ 1 ] ),
+            CvrtPosition ( self.m_StartXY [ 0 ] ),
+            CvrtPosition ( self.m_StartXY [ 1 ] ),
+            CvrtPosition ( self.m_TargetXY [ 0 ] ),
+            CvrtPosition ( self.m_TargetXY  [ 1 ] ),
+            CvrtPosition ( self.m_TargetSection [ 0 ] [ 0 ] ),
+            CvrtPosition ( self.m_TargetSection [ 0 ] [ 1 ] ),
+            CvrtPosition ( self.m_TargetSection [ 1 ] [ 0 ] ),
+            CvrtPosition ( self.m_TargetSection [ 1 ] [ 1 ] ),
         )
         return ( settings, values )
 
+    def SaveMazeSetting ( self, values ):
+        [   w, 
+            h,
+            bw,
+            pw, 
+            sx,
+            sy,
+            tx,
+            ty,
+            tssx,
+            tssy,
+            tsex,
+            tsey
+        ] = values
 
-    def GetMaze ( self ): 
-        maze_size = self.m_MazeSize
-        wblock = self.m_BlockWidth * 1000
-        wpoll = self.m_PollWidth * 1000
-        mouse_pos = ( self.m_MousePos [ 0 ] * 1000, self.m_MousePos [ 1 ] * 1000 )
-        mouse_size = ( self.m_MouseSize [ 0 ] * 1000, self.m_MouseSize [ 1 ] * 1000 )
-        return ( maze_size,
-                 wblock,
-                 wpoll,
-                 mouse_pos,
-                 mouse_size )
+        def CvrtPosition (x):
+            if x == 0:
+                return 255
+            return ( x - 1 )
 
-    def SetMaze ( self, maze_size, wblock, wpoll, mouse_pos, mouse_size ): 
-        self.m_MazeSize = maze_size
-        self.m_BlockWidth = ( float ( wblock ) / 1000 )
-        self.m_PollWidth  = ( float ( wpoll )  / 1000 )
+        old_size = self.m_MazeSize
+        old_block = self.m_BlockWidth
+        old_poll = self.m_PollWidth
+        self.m_MazeSize = ( w, h ) 
+        self.m_BlockWidth = float ( bw ) / 1000
+        self.m_PollWidth = float ( pw ) / 1000
+        self.m_StartXY = ( CvrtPosition ( sx ), CvrtPosition ( sy ) )
+        self.m_TargetXY = ( CvrtPosition ( tx ), CvrtPosition ( ty ) )
+        self.m_TargetSection = ( ( CvrtPosition ( tssx ), CvrtPosition ( tssy ) ), ( CvrtPosition ( tsex ), CvrtPosition ( tsey ) ) )
 
-        self.m_MousePos  = ( mouse_pos [ 0 ] / 1000, mouse_pos [ 1 ] / 1000 )
-        self.m_MouseSize = ( float ( mouse_size [ 0 ] ) / 1000, float ( mouse_size [ 1 ] ) / 1000 )
-
-        # init maze
-        ( w, h ) = self.m_MazeSize
-        self.m_MaxW = float(self.m_BlockWidth * w + self.m_PollWidth)
-        self.m_MaxH = float(self.m_BlockWidth * h + self.m_PollWidth)
-
-        self.InitMaze ()
+        if ( old_size != self.m_MazeSize 
+           or old_block != self.m_BlockWidth 
+           or old_poll != self.m_PollWidth ) :
+            # init maze
+            self.InitMaze ()
         self.DrawMaze () 
-
 
     ########################################################################
     # Methods for reading maze file
@@ -821,6 +876,9 @@ class MazePanel(mycanvas.NavCanvas):
         if CheckSum: 
             return False
 
+        old_size = self.m_MazeSize
+        old_block = self.m_BlockWidth
+        old_poll = self.m_PollWidth
         self.m_MazeSize                     = ( Width, Height )
         self.m_BlockWidth                   = float ( BlockWidth ) / 1000 
         self.m_PollWidth                    = float ( WallThick ) / 1000
@@ -833,6 +891,13 @@ class MazePanel(mycanvas.NavCanvas):
         self.m_MazeData = self.m_MazeFileData [calcsize("4sI13B256xB"):] 
         self.m_UnDoList = []
         self.m_UnDoIndex = 0
+
+        if ( old_size != self.m_MazeSize 
+           or old_block != self.m_BlockWidth 
+           or old_poll != self.m_PollWidth ) :
+            # init maze
+            self.InitMaze ()
+        self.SetMazeFromFileData () 
         return True
 
     def ReadMazeBinary ( self, FileName, FileData ): 
@@ -845,11 +910,62 @@ class MazePanel(mycanvas.NavCanvas):
             self.m_MazeData = self.m_MazeFileData [calcsize("4sI13B256xB"):] 
             self.m_UnDoList = []
             self.m_UnDoIndex = 0
+            self.SetMazeFromFileData () 
             return True
         return False
 
+    def WriteMaze ( self ): 
+        self.SetFileDataFromMaze ()
+
+        # Build file header
+        Sign = "MAZE"
+        HeaderSize = calcsize ( "4sI13B256xB" )
+        Version = 1
+        Width           = self.m_MazeSize [ 0 ]
+        Height          = self.m_MazeSize [ 1 ]
+        BlockWidth      = int ( self.m_BlockWidth*1000 )
+        WallThick       = int ( self.m_PollWidth*1000 )
+        StartX          = self.m_StartXY [ 0 ]
+        StartY          = self.m_StartXY [ 1 ]
+        TargetX         = self.m_TargetXY [ 0 ]
+        TargetY         = self.m_TargetXY [ 1 ]
+        TargetSectionSX = self.m_TargetSection [ 0 ] [ 0 ]
+        TargetSectionSY = self.m_TargetSection [ 0 ] [ 1 ]
+        TargetSectionEX = self.m_TargetSection [ 1 ] [ 0 ]
+        TargetSectionEY = self.m_TargetSection [ 1 ] [ 1 ]
+        Information     = 0
+        CheckSum        = 0
+
+        # Make buffer and write header to buffer
+        pack_into( "4sI13B256xB", self.m_MazeFileData, 0,
+            Sign,
+            HeaderSize,
+            Version,
+            Width,
+            Height,
+            BlockWidth,
+            WallThick,
+            StartX,
+            StartY,
+            TargetX,
+            TargetY,
+            TargetSectionSX,
+            TargetSectionSY,
+            TargetSectionEX,
+            TargetSectionEY,
+            CheckSum
+        )
+
+        # Calculation check-sum and write it to buffer
+        CheckSum = 0
+        for d in self.m_MazeFileData [ 0 : HeaderSize ] : 
+            CheckSum = CheckSum + d 
+        CheckSum = 0x100 - ( CheckSum&0xff )
+        self.m_MazeFileData [ HeaderSize-1  ] = CheckSum
+        return True
+
     def FileNewMaze ( self ): 
-        self.m_MazeFileName = "New.maz"
+        self.m_MazeFileName = self.m_Path + os.sep + "New.maz"
         self.m_MazeFileData = None 
         self.m_MazeData = None
         self.m_UnDoList = []
@@ -911,7 +1027,7 @@ class MazePanel(mycanvas.NavCanvas):
         self.SetMazeFromFileData () 
 
     def FileSaveMaze ( self ):
-        self.SetFileDataFromMaze ()
+        self.WriteMaze ()
         name = self.m_MazeFileName
         data = self.m_MazeFileData
 
@@ -925,7 +1041,6 @@ class MazePanel(mycanvas.NavCanvas):
             dlg.Destroy()
         finally:
             f.close ()
-            return 0
 
         self.SetFileName ()
         self.m_UnDoList = []
@@ -952,6 +1067,9 @@ class MazePanel(mycanvas.NavCanvas):
         dlg.Destroy()
 
     def FileOpenMaze ( self, path = None ): 
+        if not self.ConfirmSave ():
+            return
+
         wildcard = "Maze files (*.maz)|*.maz|"     \
                    "All files (*.*)|*.*"
         if not path:
@@ -999,15 +1117,26 @@ class MazePanel(mycanvas.NavCanvas):
         f.close()
 
         if self.ReadMaze ( path, maze ):
-            self.SetMazeFromFileData () 
             self.DrawMaze ()
 
         elif self.ReadMazeBinary ( path, maze ):
-            self.SetMazeFromFileData () 
             self.DrawMaze ()
         else:
             return
         self.SetFileName ()
+
+    def ConfirmSave ( self ):
+        if self.m_UnDoList and self.m_UnDoIndex != 0:
+            msg = 'Save file "%s"' % self.m_MazeFileName
+            dlg = wx.MessageDialog(self.m_Parent, msg, 'Save', wx.YES | wx.NO | wx.CANCEL | wx.ICON_WARNING )
+            answer = dlg.ShowModal()
+            dlg.Destroy()
+            if answer == wx.ID_YES:
+                self.FileSaveMaze ()
+                return True
+            if answer == wx.ID_CANCEL:
+                return False
+        return True
 
     def SetFileName ( self ):
         name = self.m_MazeFileName
@@ -1054,14 +1183,18 @@ class MazePanel(mycanvas.NavCanvas):
         for Mode in Modes:
             tool = tb.AddRadioTool(wx.ID_ANY, shortHelp=Mode[0], bitmap=Mode[2])
             self.Bind(wx.EVT_TOOL, self.SetMode, tool)
-            self.ModesDict[tool.GetId()]=Mode[1]
-        #self.ZoomOutTool = tb.AddRadioTool(wx.ID_ANY, bitmap=Resources.getMagMinusBitmap(), shortHelp = "Zoom Out")
-        #self.Bind(wx.EVT_TOOL, lambda evt : self.SetMode(Mode=self.GUIZoomOut), self.ZoomOutTool)
+            self.ModesDict[tool.GetId()] = ( Mode[1 ], Mode[0] )
+
+        ch = wx.Choice ( tb, - 1, choices = "1 2 3 4 5 6 7 8".split(" ") )
+        ch.SetSelection ( 0 )
+        tool = tb.AddControl ( ch )
+        self.Bind(wx.EVT_CHOICE, self.OnSetCursorSize, ch)
 
     def AddToolbarZoomButton(self, tb):
-        self.ZoomButton = wx.Button(tb, label="Fit", style=wx.BORDER_NONE)
-        tb.AddControl(self.ZoomButton)
-        self.ZoomButton.Bind(wx.EVT_BUTTON, self.ZoomToFit)
+        tb.AddSeparator()
+        bmp = wx.Bitmap ( "fit.png" )
+        tool = tb.AddLabelTool(wx.ID_ANY, "Fit", bmp, shortHelp="Fit", longHelp="")
+        self.Bind(wx.EVT_TOOL, self.ZoomToFit, tool)
 
     def BuildToolbar(self):
         TBFLAGS = ( wx.TB_HORIZONTAL
@@ -1076,8 +1209,32 @@ class MazePanel(mycanvas.NavCanvas):
         self.AddToolbarZoomButton(tb)
         tb.Realize()
 
+    def SetMode(self, event):
+        self.EditMode = self.ModesDict[event.GetId()] [ 1 ]
+        Mode = self.ModesDict[event.GetId()] [ 0 ]
+        self.Canvas.SetMode(Mode)
+
+        if self.EditMode == "Edit":
+            self.SetCursor ( True, self.m_Colors [ 'WallExist'] )
+        elif self.EditMode == "Erase":
+            self.SetCursor ( True, self.m_Colors [ 'WallDetected'] )
+        elif self.EditMode == "Start":
+            print "start"
+        elif self.EditMode == "Target":
+            print "target"
+        else:
+            self.SetCursor ( False )
+        self.Canvas.SetFocus()
+
+    def OnSetCursorSize( self, event ):
+        num = int ( event.GetString () )
+        self.SetCursorSize ( num )
+
+    def ZoomToFit(self,Event):
+        self.Canvas.ZoomToBB()
+        self.Canvas.SetFocus()
+
     def OnToolClick ( self, event ):
-        print "Tool Clicked", event.GetId ()
         id = event.GetId () 
 
         if id == wx.ID_OPEN:
@@ -1097,10 +1254,17 @@ class MazePanel(mycanvas.NavCanvas):
     def RunPauseMouse(self, wait=True):
         self.m_Mouse.RunPause ( wait )
 
-    def StopMouse(self):
-        self.m_Mouse.Stop ()
-        self.SetMazeFromFileData () 
-        self.DrawMaze ()
+    def StopMouse(self, draw=True, wait=True):
+        self.m_Mouse.Stop ( wait )
+        if draw:
+            self.ResetAllWall () 
+            self.DrawMaze ()
+
+    def EnableFirstRun ( self, enable ):
+        self.m_Mouse.SetEnableFirstRun ( enable )
+
+    def EnableRoutes ( self, enable ):
+        self.m_Mouse.SetEnableRoutes  ( enable )
 
     def OnSize(self, event):
         pass
@@ -1114,24 +1278,178 @@ class MazePanel(mycanvas.NavCanvas):
     def OnMove(self, event):
         frame = wx.FindWindowById ( ID_WINDOW_TOP_LEVEL, None )
         frame.SetStatusText("%.2f, %.2f"%tuple(event.Coords))
+        # print 'drag', event.Dragging ()
+        
+        if  self.EditMode == "Edit":
+            if event.Dragging ():
+                if not self.ControlDown:
+                    if self.ShiftDown:
+                        self.EditClickedWall ( False )
+                    else:
+                        self.EditClickedWall ( True )
+
+            self.MoveCursor ( event.Coords )
+
+        elif  self.EditMode == "Erase":
+            if event.Dragging ():
+                if not self.ControlDown:
+                    if self.ShiftDown:
+                        self.EditClickedWall ( True )
+                    else:
+                        self.EditClickedWall ( False )
+
+            self.MoveCursor ( event.Coords )
+
         event.Skip()
-            
+
     def LeftDownEvent(self, event):
         if self.m_Mouse.IsRunning ():
             self.RunPauseMouse()
             self.MouseAutoPaused = True
+
+        if self.EditMode == "Edit":
+            xy = event.GetPosition()
+            xy = self.Canvas.PixelToWorld ( xy )
+            if not self.ControlDown:
+                if self.ShiftDown:
+                    self.EditClickedWall ( False )
+                else:
+                    self.EditClickedWall ( True )
+            self.MoveCursor ( xy )
+
+        elif self.EditMode == "Erase":
+            xy = event.GetPosition()
+            xy = self.Canvas.PixelToWorld ( xy )
+            if not self.ControlDown:
+                if self.ShiftDown:
+                    self.EditClickedWall ( True )
+                else:
+                    self.EditClickedWall ( False )
+            self.MoveCursor ( xy )
+
+        elif self.EditMode == "Start":
+            print "set start"
+
+        elif self.EditMode == "Target":
+            xy = event.GetPosition()
+            xy = self.Canvas.PixelToWorld ( xy )
+            self.SetTarget ( xy )
+
         self.Canvas._LeftDownEvent(event)
+        self.Canvas.SetFocus() 
 
     def LeftUpEvent(self, event):
         self.Canvas._LeftUpEvent(event)
+
         if not self.m_Mouse.IsRunning () and self.MouseAutoPaused:
             self.RunPauseMouse()
             self.MouseAutoPaused = False
 
+        self.Canvas.SetFocus() 
+
+    def ShiftEditMode ( self, shift ):
+        self.ShiftDown = shift
+        if not self.ShiftDown:
+            if self.EditMode == "Edit":
+                self.SetCursor ( True, self.m_Colors [ 'WallExist'] )
+            elif self.EditMode == "Erase":
+                self.SetCursor ( True, self.m_Colors [ 'WallDetected'] )
+        else:
+            if self.EditMode == "Edit":
+                self.SetCursor ( True, self.m_Colors [ 'WallDetected'] )
+            elif self.EditMode == "Erase":
+                self.SetCursor ( True, self.m_Colors [ 'WallExist'] )
+
+    def ControlEditMode ( self, control ):
+        self.ControlDown = control
+        if self.ControlDown :
+            if self.EditMode == "Edit" or self.EditMode == "Erase":
+                self.Canvas.SetMode(self.Modes[5][1])
+        else:
+            if self.EditMode == "Edit" or self.EditMode == "Erase":
+                self.Canvas.SetMode(self.Modes[0][1])
+
     def OnKeyDown ( self, event ):
-        print "key###"
-        self.Canvas.KeyDownEvent( event )    
+        ShiftDown = event.ShiftDown()
+        ControlDown = event.ControlDown()
+
+        if ShiftDown != self.ShiftDown:
+            self.ShiftEditMode ( ShiftDown )
+
+        if ControlDown != self.ControlDown:
+            self.ControlEditMode ( ControlDown )
+
         event.Skip ()
+
+    def OnKeyUp ( self, event ):
+        ShiftDown = event.ShiftDown()
+        ControlDown = event.ControlDown()
+
+        if ShiftDown != self.ShiftDown:
+            self.ShiftEditMode ( ShiftDown )
+
+        if ControlDown != self.ControlDown:
+            self.ControlEditMode ( ControlDown )
+
+        event.Skip ()
+
+    def EditClickedWall ( self, enable ):
+        BB = self.m_Cursor.BoundingBox
+        for i in range ( len ( self.m_Walls ) ) :
+            if self.m_Walls [i] and self.m_Walls [i].BoundingBox.Overlaps ( BB ) :
+                self.EditWall ( i, enable )
+                
+    def SetTarget ( self, pt ):
+        bw = self.m_BlockWidth
+        pw = self.m_PollWidth
+        pos = [ int ( ( pt [ 0 ] - pw/2 ) / bw ), int ( ( pt [ 1 ] - pw/2 ) / bw ) ]
+        if self.m_TargetXY == pos:
+            self.m_TargetXY = [ 255, 255 ]
+        else:
+            self.m_TargetXY = pos
+        print "set target:", self.m_TargetXY
+
+    def SetTargetSection ( self, pt, start ):
+        pos = ( int ( ( pt [ 0 ] - pw/2 ) / bw ), int ( ( pt [ 1 ] - pw/2 ) / bw ) )
+        if start:
+            self.m_TargetSection [ 0 ] = pos 
+        else:
+            self.m_TargetSection [ 1 ] = pos 
+
+    def EditClickedWall_old ( self, pt, enable ):
+        bw = self.m_BlockWidth
+        cw = self.m_BlockWidth / 2
+        pw = self.m_PollWidth
+        
+        def IsOverlaps ( rect1, rect2 ):
+            ( sx1, sy1, ex1, ey1 ) = ( rect1 [ 0 ], rect1 [ 1 ], rect1 [ 0 ] + rect1 [ 2 ], rect1 [ 1 ] + rect1 [ 3 ] )
+            ( sx2, sy2, ex2, ey2 ) = ( rect2 [ 0 ], rect2 [ 1 ], rect2 [ 0 ] + rect2 [ 2 ], rect2 [ 1 ] + rect2 [ 3 ] )
+            if ( (ex1 >= sx2) and (sx1 <= ex2) and
+                 (ey1 >= sy2) and (sy1 <= ey2) ):
+                return True
+            else:
+                return False
+
+        p = ( pt [ 0 ] - cw, pt [ 1 ] - cw )
+        p = ( pt [ 0 ] + cw, pt [ 1 ] + cw )
+        p = ( pt [ 0 ] + cw, pt [ 1 ] - cw )
+        p = ( pt [ 0 ] - cw, pt [ 1 ] + cw )
+        pos = ( int ( ( pt [ 0 ] - pw/2 ) / bw ), int ( ( pt [ 1 ] - pw/2 ) / bw ) )
+        spot = ( pt [ 0 ] - cw, pt [ 1 ] - cw, cw*2, cw*2 )
+        print pos, spot
+        
+        wall = self.GetNWallRect( pos )
+        if IsOverlaps ( spot, wall ):
+            self.EditWall ( self.GetWallIndex ( pos, WALL_LU_N ), enable )
+        wall = self.GetEWallRect( pos )
+        if IsOverlaps ( spot, wall ):
+            self.EditWall ( self.GetWallIndex ( pos, WALL_LU_E ), enable )
+        wall = self.GetSWallRect( pos )
+        if IsOverlaps ( spot, wall ):
+            self.EditWall ( self.GetWallIndex ( pos, WALL_LU_S ), enable )
+        wall = self.GetWWallRect( pos )
+        if IsOverlaps ( spot, wall ):
+            self.EditWall ( self.GetWallIndex ( pos, WALL_LU_W ), enable )
 
     def EditUndo ( self ):
         undo = self.m_UnDoList
@@ -1169,7 +1487,7 @@ class MazePanel(mycanvas.NavCanvas):
 
             self.m_UnDoIndex = undoindex 
 
-    def EditWall ( self, wall_index ):
+    def EditWall ( self, wall_index, enable ):
         undo = self.m_UnDoList
         undoindex = self.m_UnDoIndex
         old_wall = wall_type = self.GetWall ( wall_index )
@@ -1177,10 +1495,19 @@ class MazePanel(mycanvas.NavCanvas):
         if undoindex < len ( undo ) :
             del undo [ undoindex: ] 
 
-        if wall_type <= WALL_UNKNOWN:
-            wall_type = WALL_EXIST
+        if enable:
+            if wall_type == WALL_UNKNOWN:
+                wall_type = WALL_EXIST
+            elif wall_type == WALL_NONE:
+                wall_type = WALL_DETECTED
         else:
-            wall_type = WALL_NONE
+            if wall_type == WALL_EXIST:
+                wall_type = WALL_UNKNOWN
+            elif wall_type == WALL_DETECTED:
+                wall_type = WALL_NONE
+
+        if wall_type == old_wall:
+            return
 
         undo.append( ( wall_index, old_wall, wall_type ) )
         undoindex = len ( undo ) 
@@ -1198,9 +1525,12 @@ class MazePanel(mycanvas.NavCanvas):
         self.m_UnDoList = undo
         self.m_UnDoIndex = undoindex 
 
-    def OnWallClick ( self, Object ):
-        index = int ( Object.Name )
-        self.EditWall ( index )
+    def OnClose ( self ):
+        ok = self.ConfirmSave ()
+        if ok:
+            self.StopMouse(draw=False)
+            return True 
+        return False
 
 #-------------------------------------------------------------------------------
 # Setting dialog
@@ -1338,11 +1668,13 @@ class SettingPanel(wx.Panel):
 
         self.Maze = wx.FindWindowById ( ID_WINDOW_MAZE )
 
-        ( settings, values ) = maze.GetMazeSettings ()
-        self.Values = values
-        self.InitSettings ( settings, values )
+        self.InitSettings ()
 
-    def InitSettings ( self, settings, values ):
+    def InitSettings ( self ):
+        ( settings, values ) = self.Maze.GetMazeSettings ()
+        self.Values = values
+        ToResetLimit = []
+
         edit_limited = False
         values = list ( values )
         controls = []
@@ -1366,15 +1698,16 @@ class SettingPanel(wx.Panel):
                 pass
 
             if type == 'Position':
-                limit = ( 0, self.MazeWidth )
+                _limit = ( limit [ 0 ], self.MazeWidth )
+                ToResetLimit.append ( len ( controls ) )
 
-                edit = masked.NumCtrl (self,  value=values [ 0 ], min=limit [ 0 ], max=limit [ 1 ], limited=edit_limited, integerWidth=3, allowNegative=False)
+                edit = masked.NumCtrl (self,  value=values [ 0 ], min=_limit [ 0 ], max=_limit [ 1 ], limited=edit_limited, integerWidth=3, allowNegative=False)
                 del values [ 0 ]
                 controls.append ( edit )
                 sizer.Add ( edit, 0, wx.ALIGN_LEFT )
                 sizer.AddSpacer ( 5 )
 
-                limit = ( 0, self.MazeHeight )
+                limit = ( limit [ 1 ], self.MazeWidth )
 
             if type == 'Description':
                 description =  wx.StaticText ( self, - 1, des ) 
@@ -1390,12 +1723,71 @@ class SettingPanel(wx.Panel):
                 gs.Add ( title, ( row, 0 ), flag = wx.ALIGN_RIGHT | wx.ALIGN_CENTRE_VERTICAL )
                 gs.Add ( sizer, ( row, 1 ), flag = wx.ALIGN_CENTRE_VERTICAL )
                 gs.Add ( description, ( row, 2 ), flag = wx.ALIGN_CENTRE_VERTICAL )
+    
 
             row = row + 1
+
+        self.BtnApply = b = wx.Button ( self, -1, "Apply" )
+        gs.Add ( b, ( row, 1 ), flag = wx.ALIGN_LEFT | wx.ALIGN_CENTRE_VERTICAL )
+        self.Bind(wx.EVT_BUTTON, self.OnClickApply, b)
 
         s = wx.BoxSizer (wx.HORIZONTAL)
         s.Add ( gs, 1, wx.EXPAND | wx.ALL, 20 )
         self.SetSizer ( s )
+
+        self.Bind(masked.EVT_NUM, self.OnChangedMazeWidth, controls [ 0 ] )
+        self.Bind(masked.EVT_NUM, self.OnChangedMazeHeight, controls [ 1 ] )
+
+        self.Controls = controls
+        self.ToResetLimit = ToResetLimit 
+
+    def LoadSettings ( self ):
+        ( settings, values ) = self.Maze.GetMazeSettings ()
+        values = list ( values )
+
+        for Control in self.Controls:
+            Control.SetValue ( values [ 0 ] )
+            del values [ 0 ]
+
+        # self.BtnApply.Enable ( False )
+            
+    def SetMax( self, max, IsHeight ):
+        for index in self.ToResetLimit:
+            self.Controls [ index+IsHeight ].SetMax ( max )
+
+    def IsValueOk( self):
+        for Control in self.Controls:
+            if not Control.IsInBounds ():
+                return False
+        return True
+
+    def SaveValue( self ):
+        controls  = self.Controls
+        values  = list ( self.Values )
+        for index in range ( len ( values ) ):
+            values [ index ] = controls [ index ].GetValue ()
+        
+        self.Maze.SaveMazeSetting ( values )
+
+    def OnChangedMazeWidth ( self, event ):
+        ctl = event.GetEventObject()
+        value = ctl.GetValue()
+        self.SetMax( value, 0 )
+
+    def OnChangedMazeHeight ( self, event ):
+        ctl = event.GetEventObject()
+        value = ctl.GetValue()
+        self.SetMax( value, 1 )
+
+    def OnClickApply ( self, event ):
+        if self.IsValueOk ():
+            self.SaveValue ()
+        else:
+            msg = "Check bad values!"
+            dlg = wx.MessageDialog(self, msg, 'Apply', wx.OK | wx.ICON_ERROR )
+            dlg.ShowModal()
+            dlg.Destroy()
+
 
 #-------------------------------------------------------------------------------
 # Control and Information Pannel 
@@ -1404,44 +1796,78 @@ ID_BUTTON_STOP      = 101
 ID_BUTTON_LOAD_MAZE = 102
 
 class ControlPanel(wx.Panel):
-    def __init__(self, parent, maze, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
+    def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
         wx.Panel.__init__(self, parent, ID, style=style)
-        self.m_Log = wx.FindWindowById ( ID_WINDOW_LOG )
+
+        self.Log = wx.FindWindowById ( ID_WINDOW_LOG )
+        if self.Log:
+            self.Log = self.Log.Log
+
+        maze = self.m_Maze = wx.FindWindowById ( ID_WINDOW_MAZE )
 
         self.m_Parent = parent
-        self.m_Maze = maze
         path = os.getcwd()
         self.m_Path = os.path.join(path, "maze")
 
-        gs = wx.FlexGridSizer ( 5, 1 )
+        gs = wx.FlexGridSizer ( 7, 1, 5, 5 )
+        gs.AddGrowableCol(0)
         b = wx.Button ( self, ID_BUTTON_START, "&Run/Pause" )
+        row = 0
         
         self.Bind(wx.EVT_BUTTON, self.OnClickRunPause, b)
         gs.Add ( b, 0, wx.EXPAND )
+        row = row + 1
         gs.SetItemMinSize ( 0, 1, 50 )
 
-        b = wx.Button ( self, ID_BUTTON_STOP, "&Stop" )
+        self.BtnStop = b = wx.Button ( self, ID_BUTTON_STOP, "&Stop" )
+        self.BtnStop.Enable ( False )
         self.Bind(wx.EVT_BUTTON, self.OnClickStopMouse, b)
         gs.Add ( b, 0, wx.EXPAND )
+        row = row + 1
+        
+        self.cbFirstRun = wx.CheckBox ( self, - 1, "First Run" )
+        self.cbFirstRun.SetValue ( True )
+        gs.Add ( self.cbFirstRun , 0, wx.EXPAND )
+        maze.EnableFirstRun ( True )
+        row = row + 1
 
-        self.maze_list = wx.ListCtrl(self, -1, style = wx.LC_REPORT | wx.LC_NO_HEADER | wx.LC_SINGLE_SEL | wx.LC_SORT_ASCENDING )
-        # self.maze_list.SetColumnWidth ( 0, wx.LIST_AUTOSIZE ) 
-        self.maze_list.InsertColumn ( 0, "" )
-        self.maze_list.SetColumnWidth ( 0, 200 )
-        gs.Add ( self.maze_list, 0, wx.EXPAND )
+        self.cbDispRoutes = wx.CheckBox ( self, - 1, "Display Routes" )
+        self.cbDispRoutes .SetValue ( True )
+        maze.EnableRoutes ( True )
+        gs.Add ( self.cbDispRoutes , 0, wx.EXPAND )
+        row = row + 1
+        gs.AddGrowableRow( row )
+
+        self.tree = wx.TreeCtrl(self, wx.ID_ANY) 
+        
+        isz = (16,16)
+        il = wx.ImageList(isz[0], isz[1])
+        self.fldridx     = il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,      wx.ART_OTHER, isz))
+        self.fldropenidx = il.Add(wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN,   wx.ART_OTHER, isz))
+        self.fileidx     = il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE, wx.ART_OTHER, isz))
+
+        self.root = self.tree.AddRoot(self.m_Path)
+        self.tree.SetPyData(self.root, None)
+        self.tree.SetItemImage(self.root, self.fldridx, wx.TreeItemIcon_Normal)
+        self.tree.SetItemImage(self.root, self.fldropenidx, wx.TreeItemIcon_Expanded)        
+
+        self.tree.SetImageList(il)
+        self.il = il
+        
+        gs.Add ( self.tree, 0, wx.EXPAND )
+        row = row + 1
 
         b = wx.Button ( self, ID_BUTTON_LOAD_MAZE, "&Load maze lists" )
         self.Bind(wx.EVT_BUTTON, self.OnClickLoadMazeList, b)
         gs.Add ( b, 0, wx.EXPAND )
-
-        gs.AddGrowableCol(0)
-        gs.AddGrowableRow(2)
+        row = row + 1
 
         self.SetSizer( gs )
 
-        self.Bind ( wx.EVT_LIST_ITEM_SELECTED, self.OnListBoxSelected, self.maze_list )
-        self.Bind ( wx.EVT_KEY_DOWN, self.OnKeyDown )
-        self.Bind ( wx.EVT_CLOSE, self.OnCloseApp )
+        # self.Bind ( wx.EVT_LIST_ITEM_SELECTED, self.OnListBoxSelected, self.maze_list )
+        self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
+        self.Bind ( wx.EVT_CHECKBOX, self.OnEnableFirstRun, self.cbFirstRun )
+        self.Bind ( wx.EVT_CHECKBOX, self.OnEnableRoutes, self.cbDispRoutes )
 
         self.LoadMazeList()
 
@@ -1473,34 +1899,73 @@ class ControlPanel(wx.Panel):
                     l = len ( self.m_Path )
                     self.maze_list.InsertStringItem (0, next [ l+1: ] )
 
+    def AddFilesInDir(self, path, parent):
+        filter_ext = '.maz'
+        try:
+            flist = os.listdir(path)
+        except:
+            msg = "'maze' directory is not fond. please make 'maze' directory!"
+            dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
+            dlg.ShowModal()
+            dlg.Destroy()
+            return;
+
+        for f in flist:
+            next = os.path.join(path, f)
+            name = next.split (os.sep) [ -1 ]
+            if os.path.isdir(next):
+                # directory
+                child = self.tree.AppendItem(parent, name)
+                self.tree.SetPyData(child, None)
+                self.tree.SetItemImage(child, self.fldridx, wx.TreeItemIcon_Normal)
+                self.tree.SetItemImage(child, self.fldropenidx, wx.TreeItemIcon_Expanded)
+
+                self.AddFilesInDir ( next, child )
+            else:
+                # file
+                
+                ext = os.path.splitext(next)[-1]
+                ext = ext.lower()
+                if ext == filter_ext:
+                    l = len ( self.m_Path )
+                    item = self.tree.AppendItem ( parent, name )
+                    self.tree.SetPyData(item, None)
+                    self.tree.SetItemImage(item, self.fileidx, wx.TreeItemIcon_Normal)
+                    self.tree.SetItemImage(item, self.fileidx, wx.TreeItemIcon_Selected)
+                    # self.maze_list.InsertStringItem (0, next [ l+1: ] )
+
+        self.tree.SortChildren(parent)
+
     def LoadMazeList(self):
-        self.maze_list.DeleteAllItems()
-        self.FilesInDir(self.m_Path)
-        self.maze_list.GetItemCount ()
-        self.maze_list.SetItemState(0,
-                wx.LIST_STATE_FOCUSED|wx.LIST_STATE_SELECTED, 
-                wx.LIST_STATE_FOCUSED|wx.LIST_STATE_SELECTED)
-
-    def OnKeyDown(self, event):
-        keycode = event.GetKeyCode()
-        print "KeyDown=", keycode
-
-        if keycode == wx.WXK_ESCAPE:
-           self.CloseApp(None) 
-        
-        # if keycode == 'r' or keycode == 'R':
-            # self.OnClickRunStop(self, None)
-# 
-        # if keycode == 's' or keycode == 'S':
-            # self.OnClickSetting(self, None)
+        self.AddFilesInDir(self.m_Path, self.root)
+        self.tree.Expand(self.root)
+        # (child, cookie) = self.tree.GetFirstChild(self.root)
+        # if child.IsOk():
+            # self.tree.Expand(child)
 
     def OnClickRunPause(self, event):
         maze = self.m_Maze
+        self.cbFirstRun.Enable ( False )
+        self.cbDispRoutes.Enable ( False )
         maze.RunPauseMouse()
-        
+        self.BtnStop.Enable ( True )
+
     def OnClickStopMouse(self, event):
         maze = self.m_Maze
         maze.StopMouse()
+        self.cbFirstRun.Enable ( True )
+        self.cbDispRoutes.Enable ( True )
+        self.BtnStop.Enable ( False )
+        
+    def OnEnableFirstRun ( self, event ):
+        maze = self.m_Maze
+        print event.IsChecked() 
+        maze.EnableFirstRun ( event.IsChecked() )
+
+    def OnEnableRoutes ( self, event ):
+        maze = self.m_Maze
+        print event.IsChecked() 
+        maze.EnableRoutes ( event.IsChecked() )
 
     def OnClickSetting(self, event):
         self.Setting()
@@ -1508,25 +1973,42 @@ class ControlPanel(wx.Panel):
     def OnClickLoadMazeList(self, event):
         self.LoadMazeList()
 
+    def OnSelChanged (self, event):
+        self.item = event.GetItem()
+        if self.item:
+            name = self.tree.GetItemText( self.item )
+            parent = self.item
+            while parent.IsOk ():
+                parent = self.tree.GetItemParent ( parent )
+                if parent.IsOk ():
+                    name = self.tree.GetItemText( parent ) + os.sep + name
+            if os.path.isfile ( name ):
+                self.m_Maze.FileOpenMaze(name)
+
     def OnListBoxSelected(self, event):
         sel = event.m_itemIndex
         path = os.path.join(self.m_Path, self.maze_list.GetItemText(sel))
         self.m_Maze.FileOpenMaze(path)
 
-    def OnCloseApp(self, event):
-        evt = wx.CloseEvent(wx.wxEVT_CLOSE_WINDOW)
-        wx.PostEvent(self.GetParent().GetParent(), evt)
-        
 #-------------------------------------------------------------------------------
 class MainPanel(wx.Notebook):
     def __init__ ( self, parent, ID = wx.ID_ANY ):
         wx.Notebook.__init__ ( self, parent, ID )
         maze = MazePanel ( self, ID_WINDOW_MAZE )
-        setting = SettingPanel ( self, maze, ID_WINDOW_SETTING )
+        self.Setting = setting = SettingPanel ( self, maze, ID_WINDOW_SETTING )
 
         self.AddPage ( maze, "Maze" )
         self.AddPage ( setting, "Setting" )
-    
+   
+        self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.OnPageChanged)
+
+    def OnPageChanged(self, event):
+        new = event.GetSelection()
+        if new==1:
+            self.Setting.LoadSettings ()
+
+        event.Skip()
+   
 #-------------------------------------------------------------------------------
 # log panel 
 class LogPanel(wx.Panel):
@@ -1597,6 +2079,7 @@ class AppFrame(wx.Frame):
         # self.Bind(wx.EVT_MENU, self.SetupMaze, id=ID_MENU_FILE_SETUP)
         # self.Bind(wx.EVT_MENU, self.CloseWindow, id=ID_MENU_FILE_EXIT)
         # self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
+        self.Bind ( wx.EVT_CLOSE, self.OnCloseApp )
 
     def OpenFile(self, event):
         pass
@@ -1615,6 +2098,13 @@ class AppFrame(wx.Frame):
         maze = wx.FindWindowById ( ID_WINDOW_MAZE, None )
         if maze:
             maze.PostInit ()
+
+    def OnCloseApp(self, event):
+        maze = wx.FindWindowById ( ID_WINDOW_MAZE, None )
+        if maze:
+            if maze.ConfirmSave ():
+                maze.StopMouse (draw = False)
+                event.Skip()
 
 #-------------------------------------------------------------------------------
 # Application

@@ -107,20 +107,20 @@ class NavCanvas(wx.Panel):
                       ("Pan",      GUIMode.GUIMove(),    Resources.getHandBitmap()),
                       ]
         
-        self.BuildToolbar()
+        # self.BuildToolbar()
         ## Create the vertical sizer for the toolbar and Panel
         # box = wx.BoxSizer(wx.VERTICAL)
         # box.Add(self.ToolBar, 0, wx.ALL | wx.ALIGN_LEFT | wx.GROW, 4)
 
         # self.Canvas = FloatCanvas.FloatCanvas(self, **kwargs)
-        self.Canvas = MyFloatCanvas ( self, ** kwargs )
+        # self.Canvas = MyFloatCanvas ( self, ** kwargs )
         # box.Add(self.Canvas, 1, wx.GROW)
 # 
         # self.SetSizerAndFit(box)
 
         # default to first mode
         #self.ToolBar.ToggleTool(self.PointerTool.GetId(), True)
-        self.Canvas.SetMode(self.Modes[0][1])
+        # self.Canvas.SetMode(self.Modes[0][1])
 
         return None
 
