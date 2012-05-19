@@ -31,14 +31,42 @@ class MyFloatCanvas(FloatCanvas.FloatCanvas):
                  Debug,
                  **kwargs)
 
-    def _DrawObject(self, Object, HTdc = None):
+    def _DrawObjectBackground ( self, Object ):
+        dc = wx.MemoryDC()
+        dc.SelectObject(self._Buffer)
+        dc.SetBackground(self.BackgroundBrush)
+        dc.BeginDrawing()
+        WorldToPixel = self.WorldToPixel 
+        ScaleWorldToPixel = self.ScaleWorldToPixel
+        Object._Draw(dc, WorldToPixel, ScaleWorldToPixel, None)
+        dc.EndDrawing()
+
+    def _DrawObjectScreen ( self, Object ):
+        dc = wx.ClientDC(self) 
+        WorldToPixel = self.WorldToPixel # for speed
+        ScaleWorldToPixel = self.ScaleWorldToPixel # for speed
+        Object._Draw(dc, WorldToPixel, ScaleWorldToPixel, None)
+
+    def _ClearObjectScreen ( self, Object ):
+        dc = wx.MemoryDC()
+        dc.SelectObject(self._Buffer)
+        ScreenDC =  wx.ClientDC(self)
+        (X,Y) = self.WorldToPixel( (Object.BoundingBox [ 0 ] ) )
+        (X2,Y2) = self.WorldToPixel( (Object.BoundingBox [ 1 ] ) )
+        ScreenDC.Blit(X-2, Y2-2, X2-X+4, Y-Y2+4, dc, X-2, Y2-2)
+        # ScreenDC.Blit(X-1, Y2-1, X2-X+2, Y-Y2+2, dc, X-1, Y2-1)
+
+    def _DrawObject(self, Object, Foreground = False, HTdc = None):
         """
         This is a convenience function;
         This function takes the list of objects and draws them to specified
         device context.
         """
         dc = wx.MemoryDC()
-        dc.SelectObject(self._Buffer)
+        if Foreground:
+            dc.SelectObject(self._ForegroundBuffer)
+        else:
+            dc.SelectObject(self._Buffer)
         
         ScreenDC =  wx.ClientDC(self)
         ViewPortWorld = N.array(( self.PixelToWorld((0,0)),

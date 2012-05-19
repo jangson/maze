@@ -22,11 +22,6 @@ import time, random
 
 DRAW_MOUSE = True
 USE_MOUSE_IMAGE = False
-WHEEL_WIDTH = 0.060
-WIDTH = 0.060
-HEIGHT = 0.070
-BLOCK = 0.18
-POLL = 0.012
 
 #---------------------------------------------------------------------------
 frame_size_x = 640
@@ -37,33 +32,35 @@ class AppFrame(wx.Frame):
         # create frame
         frame = wx.Frame.__init__(self, parent, -1, title, size=(frame_size_x, frame_size_y))
 
+        self.MazeClassic = 1
+
         # create status bar
         self.m_status = self.CreateStatusBar(1)
 
         sizer = wx.BoxSizer ( wx.VERTICAL )
 
         bs = wx.BoxSizer ( wx.HORIZONTAL )
-        b = wx.Button ( self, 1, "Init" )
-        self.Bind(wx.EVT_BUTTON, self.OnInit, b)
+        b = wx.Button ( self, 1, "Init Classic" )
+        self.Bind(wx.EVT_BUTTON, self.OnInitClassic, b)
         bs.Add ( b, 0, wx.ALIGN_LEFT )
 
-        b = wx.Button ( self, 2, "Turn L90" )
-        self.Bind(wx.EVT_BUTTON, self.OnBtn2, b)
+        b = wx.Button ( self, 2, "Init Half" )
+        self.Bind(wx.EVT_BUTTON, self.OnInitHalf, b)
         bs.Add ( b, 0, wx.ALIGN_LEFT )
 
-        b = wx.Button ( self, 3, "Turn R90" )
+        b = wx.Button ( self, 3, "Turn L90" )
         self.Bind(wx.EVT_BUTTON, self.OnBtn3, b)
         bs.Add ( b, 0, wx.ALIGN_LEFT )
 
-        b = wx.Button ( self, 4, "Turn R180" )
+        b = wx.Button ( self, 4, "Turn R90" )
         self.Bind(wx.EVT_BUTTON, self.OnBtn4, b)
         bs.Add ( b, 0, wx.ALIGN_LEFT )
 
-        b = wx.Button ( self, 5, "Turn R45" )
+        b = wx.Button ( self, 5, "None" )
         self.Bind(wx.EVT_BUTTON, self.OnBtn5, b)
         bs.Add ( b, 0, wx.ALIGN_LEFT )
 
-        b = wx.Button ( self, 6, "Turn R135" )
+        b = wx.Button ( self, 6, "None" )
         self.Bind(wx.EVT_BUTTON, self.OnBtn6, b)
         bs.Add ( b, 0, wx.ALIGN_LEFT )
 
@@ -182,12 +179,27 @@ class AppFrame(wx.Frame):
 
     def InitEnv ( self, xy = None, angle = None ):
         #-----------------------------------
-        self.block = BLOCK
-        self.poll = POLL
+        if self.MazeClassic :
+            print "classic"
+            MOUSE_WHEEL_WIDTH = 0.060
+            MOUSE_WIDTH = 0.060
+            MOUSE_HEIGHT = 0.070
+            MAZE_BLOCK = 0.18
+            MAZE_POLL = 0.012
+        else:
+            print "half"
+            MOUSE_WHEEL_WIDTH = 0.030
+            MOUSE_WIDTH = 0.030
+            MOUSE_HEIGHT = 0.035
+            MAZE_BLOCK = 0.09
+            MAZE_POLL = 0.006
 
-        self.wl = WHEEL_WIDTH
-        self.mw = WIDTH
-        self.mh = HEIGHT
+        self.block = MAZE_BLOCK
+        self.poll = MAZE_POLL
+
+        self.wl = MOUSE_WHEEL_WIDTH
+        self.mw = MOUSE_WIDTH
+        self.mh = MOUSE_HEIGHT
 
         self.vl = self.vr = 0.
         self.sl = self.sr = 0.
@@ -222,7 +234,7 @@ class AppFrame(wx.Frame):
 
         self.DrawMouse( self.pc, self.angle )
 
-    def OnInit ( self, evt = None ):
+    def OnInit ( self ):
         Canvas = self.Canvas
         self.m_MousePoly = None
         self.m_MousePoints = []
@@ -232,6 +244,14 @@ class AppFrame(wx.Frame):
         self.DrawBlock ()
         self.Canvas.ZoomToBB()
         
+    def OnInitClassic ( self, evt = None ):
+        self.MazeClassic = 1
+        self.OnInit ()
+
+    def OnInitHalf ( self, evt = None ):
+        self.MazeClassic = 0
+        self.OnInit ()
+
     def LoadMouseImage ( self, filename = "mouse.png" ):
         size = self.m_MouseSize 
         bmp = wx.Bitmap( filename )        
@@ -447,78 +467,6 @@ class AppFrame(wx.Frame):
         self.Move ( al, ar, t/2) 
         self.Move ( -al, -ar, t/2) 
 
-    def MoveTurn45B ( self, right = False ):
-        block = self.block
-        poll = self.poll
-        v0 = self.vl
-        wl = self.wl
-        r = block / 2.
-        angle = radians ( 45 ) 
-        t = r * angle / v0 
-        a = 2 * wl * angle / ( t ** 2 ) 
-        
-        if right:
-            al, ar = 2*a, 0 
-        else:
-            al, ar = 0, 2*a
-
-        self.Move ( al, ar, t/2) 
-        self.Move ( -al, -ar, t/2) 
-
-    def MoveTurn90B ( self, right = False ):
-        block = self.block
-        poll = self.poll
-        v0 = self.vl
-        wl = self.wl
-        r = block / 2.
-        angle = radians ( 90 ) 
-        t = r * angle / v0 
-        a = 2 * wl * angle / ( t ** 2 ) 
-        
-        if right:
-            al, ar = 2*a, 0 
-        else:
-            al, ar = 0, 2*a
-
-        self.Move ( al, ar, t/2) 
-        self.Move ( -al, -ar, t/2) 
-
-    def MoveTurn135B ( self, right = False ):
-        block = self.block
-        poll = self.poll
-        v0 = self.vl
-        wl = self.wl
-        r = block / 2.
-        angle = radians ( 135 ) 
-        t = r * angle / v0 
-        a = 2 * wl * angle / ( t ** 2 ) 
-        
-        if right:
-            al, ar = 2*a, 0 
-        else:
-            al, ar = 0, 2*a
-
-        self.Move ( al, ar, t/2) 
-        self.Move ( -al, -ar, t/2) 
-
-    def MoveTurn180B ( self, right = False ):
-        block = self.block
-        poll = self.poll
-        v0 = self.vl
-        wl = self.wl
-        r = block / 2.
-        angle = radians ( 180 ) 
-        t = r * angle / v0 
-        a = 2 * wl * angle / ( t ** 2 ) 
-        
-        if right:
-            al, ar = 2*a, 0 
-        else:
-            al, ar = 0, 2*a
-
-        self.Move ( al, ar, t/2) 
-        self.Move ( -al, -ar, t/2) 
-
     def MoveTurnInPlace ( self, angle, a, right = False ):
         v0 = self.vl
         wl = self.wl
@@ -533,7 +481,7 @@ class AppFrame(wx.Frame):
         self.Move ( al, ar, t) 
         self.Move ( -al, -ar, t) 
 
-    def OnBtn2 (self, evt = None):
+    def OnBtn3 (self, evt = None):
         block = self.block
         poll = self.poll
         self.InitEnv ()
@@ -549,14 +497,14 @@ class AppFrame(wx.Frame):
         print "Over X", x - self.pc [ 0 ]
         print "Over y", self.pc [ 1 ] - y
 
-    def OnBtn3 (self, evt = None):
+    def OnBtn4 (self, evt = None):
         block = self.block
         poll = self.poll
         self.InitEnv ()
         self.currtime = self.starttime = self.drawedtime = time.time ()
 
         self.MoveWithAccelDistance ( 10, block/2 )
-        self.MoveTurn ( 90, False )
+        self.MoveTurn90 ( True )
         # self.MoveWithVelocityDistance ( 0, block/2 )
 
         x = ( block * 1 - (poll/2) )
@@ -564,9 +512,6 @@ class AppFrame(wx.Frame):
         print "pr", self.pc
         print "Over X", x - self.pc [ 0 ]
         print "Over y", self.pc [ 1 ] - y
-
-    def OnBtn4 (self, evt = None):
-        pass
 
     def OnBtn5 (self, evt = None):
         pass
