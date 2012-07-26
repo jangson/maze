@@ -108,11 +108,11 @@ class MouseEnv():
         self.WallIndexOdd = None 
 
         # Fast run parameter
-        self.SecondMaxVelocity = 4.
-        self.SecondTurnVelocity = 1.
-        self.SecondAccel = 20.
-        self.SecondAccelBrake = -40.
-
+        self.FastMaxVelocity = 4.
+        self.FastTurnVelocity = 1.
+        self.FastAccel = 20.
+        self.FastAccelBrake = -40.
+        
     def GetEnv ( self ):
         pass
         settings = ( 
@@ -144,6 +144,12 @@ class MouseEnv():
         self.MazeTargetSection = target_section
         self.drawtime = drawtime
         self.MakeWallIndex()
+
+    def SetFastRunParam ( self, v, tv, a, ab ):
+        self.FastMaxVelocity = float ( v )
+        self.FastTurnVelocity = float ( tv )
+        self.FastAccel = float ( a )
+        self.FastAccelBrake = float ( ab )
 
     def MakeWallIndex( self ):
         ( w, h ) = self.MazeSize
@@ -248,7 +254,8 @@ class MouseMotor(MouseEnv):
         return v
 
     def GetMoveDistance ( self, dist, v0, v_max, v_end, a_inc, a_dec ):
-        t_max =self.GetTimeByVelocity ( a_inc/5, v_max, v0 )
+        t_max = self.GetTimeByVelocity ( a_inc/5, v_max, v0 )
+        t_max = 60
         t_limit = self.GetTimeByVelocity ( a_inc, v_max, v0 )
         
         t = self.GetTimeByAccel ( a_inc, dist, v0 )
@@ -379,7 +386,9 @@ class MouseMotor(MouseEnv):
                     )
 
     def GetTimeByAccel ( self, a, s, v0 ):
-        a = abs ( a )
+        if a<0:
+            print "### Error accel is minus ###"
+            exit ()
         if a == 0:
             t = s / v0
         else:
@@ -640,10 +649,10 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
         self.FirstRunVelocity = 1.
 
-        self.MaxAccel = 10.
-        self.AccelStop = 5.
-        self.MaxVelocity = 4.
-        self.MaxTurnVelocity = 1.
+        # self.MaxAccel = 10.
+        # self.AccelStop = 5.
+        # self.MaxVelocity = 4.
+        # self.MaxTurnVelocity = 1.
  
     def InitDirsMap ( self, search_unknown ):
         maze = self.m_Maze
@@ -714,7 +723,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
         self.PushIMouse( pos, dir, 0 )
 
-        while pos != target:
+        while not target or pos != target:
             ( pos, dir ) = self.PopIMouse()
             if pos == None:
                 break
@@ -865,7 +874,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         maze = self.m_Maze
         return maze.GetWallIndex ( self.MazeStart, WALL_LU_N )
 
-    def MakeDirsMap ( self, pos, dir, target, search_unknown = True ):
+    def MakeDirsMap ( self, pos, dir, target = None, search_unknown = True ):
         self.InitDirsMap ( search_unknown ) 
         self.RunIMouse ( pos, dir, target )
 
@@ -968,6 +977,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
                 'FD_TR90'   : ( -diag/2-0.05/2, diag/2-0.05/2 ),
                 'FD_TR135'  : ( -diag, block-0.075/2),
             }
+        self.TurnDistance = TurnDistance
 
         def GetTurn ( diagonal ):
 
@@ -977,7 +987,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
                 if list ( seq ) == turns [ 0 : len ( seq ) ]:
 
-                    print "turn,turns=", turn [ diagonal ], turns 
+                    # print "turn,turns=", turn [ diagonal ], turns 
 
                     if not turn [ diagonal ]:
                         print "### direction error ###"
@@ -988,11 +998,13 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
                     if turns [ 0 ] == Turns [ 'T0' ]:
                         count = 0
-                        while turns and turns [ 0 ] == Turns [ 'T0' ]:
+                        while turns and turns [ 0 ] == Turns [ 'T0' ] and IsKnownWall ( routes, count+1 ) :
                             del turns [ 0 ]
                             count = count + 1
-
-                        return ( turn [ diagonal ], count, diagonal )
+                        if count:
+                            return ( turn [ diagonal ], count, diagonal )
+                        else:
+                            return ( None, 0, diagonal )
                     else:
                         if turn  [ diagonal ] == 'FD_TL45' or turn  [ diagonal ] == 'FD_TR45':
                             count = 1
@@ -1002,13 +1014,26 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
                         new_diagonal = diagonal ^ ( MouseMoves [ turn [ diagonal ] ] & 1 )
                         
-                        return ( turn [ diagonal ], count, new_diagonal )
+                        if IsKnownWalls ( routes, count ):
+                            return ( turn [ diagonal ], count, new_diagonal )
+                        else:
+                            return ( None, 0, diagonal )
 
-            print '### Do not get turn ###'
+            print '### Did not get turn ###'
             return ( None, 0, diagonal )
 
         def IsKnownWall ( routes, count ):
-            for pos in routes [ 0:count ]:
+            if len ( routes ) < (count+1):
+                return False
+            pos = routes [ count ]
+            if maze.GetWall ( pos ) == WALL_UNKNOWN or maze.GetWall ( pos ) == WALL_EXIST :
+                return False
+            return True
+
+        def IsKnownWalls ( routes, count ):
+            if len ( routes ) < (count+1):
+                return False
+            for pos in routes [ 0:count+1 ]:
                 if maze.GetWall ( pos ) == WALL_UNKNOWN or maze.GetWall ( pos ) == WALL_EXIST :
                     return False
             return True
@@ -1027,6 +1052,9 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         if add_start:
             post_dist = block / 2
             moves.append ( [ 'F_T0',  post_dist, routes [ 0 ] ] )
+        else:
+            post_dist = 0
+            moves.append ( [ 'F_T0',  post_dist, routes [ 0 ] ] )
             
         turn_appended = False
         if add_stop:
@@ -1034,7 +1062,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
             target = pos = routes [ -1 ]
             dir = dirmap [ pos ]
 
-            print "### target position:", pos, dir
+            # print "### target position:", pos, dir
             # added the last turn for stop
             if dir == Directions [ 'NE' ] or dir == Directions [ 'SW' ]: 
                 if not pos & 1:
@@ -1057,19 +1085,29 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
                 else:
                     ( new_target, new_dir) = self.GetWallDir( pos, dir, Turns [ 'TR45' ] )
                     turns.append ( Turns [ 'TR45'] )
-                    turn_appended = True
                     routes.append ( new_target )
+                    turn_appended = True
+            else:
+                    ( new_target, new_dir) = self.GetWallDir( pos, dir, Turns [ 'T0' ] )
+                    if maze.GetWall ( new_target ) == WALL_NONE:
+                        turns.append ( Turns [ 'T0'] )
+                        routes.append ( new_target )
+                        turn_appended = True
 
         while turns:
 
             ( turn, count, diagonal ) = GetTurn ( diagonal )
             
             if not turn:
+                if len ( moves ) == 1 and moves [ -1 ] [ 1 ] < block:
+                    return None
                 break
  
-            if not IsKnownWall ( routes, count+1 ):
-                print '### Some routes is not known ###'
-                return moves
+            # if not IsKnownWalls ( routes, count ):
+                # print '### Some routes is unknown ###'
+                # if len ( moves ) == 1 and moves [ -1 ] [ 1 ] < block:
+                    # return None
+                # return moves
             del routes [ 0 : count ]
 
             if turn == 'F_T0':
@@ -1124,7 +1162,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
                 moves [ -1 ] [ 1 ] = moves [ -1 ] [ 1 ] + block/2
                 moves.append ( [ 'MOVE_BACK', 0, routes [ 0 ] ] )
 
-        print "moves", moves
+        # print "moves", moves
         #self.DrawDirsMap ()
         return moves
 
@@ -1167,7 +1205,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         self.TraceTurn = route_turns 
         self.TraceUnknown = route_unknown
 
-    def DoMove ( self, cmd, distance = 0, last_speed = 0, accel = 0 ):
+    def DoMove ( self, cmd, distance = 0 ):
         block = self.block
 
         if cmd == MouseMoves [ 'MOVE_BLOCK' ] :
@@ -1182,53 +1220,39 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
             self.MoveTurnInPlace ( 180, 3, False )
         elif cmd == MouseMoves [ 'MOVE_START' ] :
             self.MoveWithVelocityDistance ( self.FirstRunVelocity, block/2 )
-            # self.MoveWithAccelDistance ( 10, block/2 )
         elif cmd == MouseMoves [ 'MOVE_STOP' ] :
             self.MoveWithVelocityDistance  ( 0, block/2 )
-            # self.MoveWithAccelDistance ( a, block * blocks  )
 
         # fast moves
         elif cmd == MouseMoves [ 'F_T0' ]:
-            # if self.vl == 0:  
-                # self.MoveWithAccelDistance ( 1, distance ) 
-            # else:
-                # self.MoveWithAccelDistance ( 0, distance ) 
-
-            s1, s2, s3 = self.GetMoveDistance ( distance, self.vl, self.SecondMaxVelocity, self.SecondTurnVelocity, self.SecondAccel, self.SecondAccelBrake )
-            self.MoveWithAccelDistance ( self.SecondAccel, s1 )
+            s1, s2, s3 = self.GetMoveDistance ( distance, self.vl, self.FastMaxVelocity, self.FastTurnVelocity, self.FastAccel, self.FastAccelBrake )
+            self.MoveWithAccelDistance ( self.FastAccel, s1 )
             if s2:
                 self.MoveWithAccelDistance ( 0, s2 )
             if s3:
-                self.MoveWithVelocityDistance  ( self.SecondTurnVelocity, s3 )
-                # self.MoveWithAccelDistance ( self.SecondAccelBrake, s3 )
+                self.MoveWithVelocityDistance  ( self.FastTurnVelocity, s3 )
         
         elif cmd == MouseMoves [ 'F_T0_STOP' ]:
-            # self.MoveWithVelocityDistance  ( 0, distance ) 
-
-            s1, s2, s3 = self.GetMoveDistance ( distance, self.vl, self.SecondMaxVelocity, 0, self.SecondAccel, self.SecondAccelBrake )
-            self.MoveWithAccelDistance ( self.SecondAccel, s1 )
+            print "#0", distance
+            s1, s2, s3 = self.GetMoveDistance ( distance, self.vl, self.FastMaxVelocity, 0, self.FastAccel, self.FastAccelBrake )
+            print "#1"
+            self.MoveWithAccelDistance ( self.FastAccel, s1 )
             if s2:
+                print "#2"
                 self.MoveWithAccelDistance ( 0, s2 )
             if s3:
+                print "#3"
                 self.MoveWithVelocityDistance  ( 0, s3 )
-                # self.MoveWithAccelDistance ( self.SecondAccelBrake, s3 )
-
-
+            print "#4"
             self.mdir = ( self.mdir + Turns [ 'T180'] ) % 8
 
         elif cmd == MouseMoves [ 'FD_T0' ]:
-            # self.MoveWithAccelDistance ( 0, distance ) 
-            # self.MoveWithAccelDistance ( self.MaxAccel, distance * 4 / 5, self.MaxVelocity ) 
-            # self.MoveWithVelocityDistance ( self.MaxTurnVelocity, distance * 1 / 5 ) 
-
-            s1, s2, s3 = self.GetMoveDistance ( distance, self.vl, self.SecondMaxVelocity, self.SecondTurnVelocity, self.SecondAccel, self.SecondAccelBrake )
-            self.MoveWithAccelDistance ( self.SecondAccel, s1 )
+            s1, s2, s3 = self.GetMoveDistance ( distance, self.vl, self.FastMaxVelocity, self.FastTurnVelocity, self.FastAccel, self.FastAccelBrake )
+            self.MoveWithAccelDistance ( self.FastAccel, s1 )
             if s2:
                 self.MoveWithAccelDistance ( 0, s2 )
             if s3:
-                self.MoveWithVelocityDistance  ( self.SecondTurnVelocity, s3 )
-                # self.MoveWithAccelDistance ( self.SecondAccelBrake, s3 )
-
+                self.MoveWithVelocityDistance  ( self.FastTurnVelocity, s3 )
 
         elif cmd == MouseMoves [ 'F_TL45' ]:
             self.MoveTurnAccel ( 45, False )
@@ -1337,11 +1361,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
             self.GetCommnad ()
 
             self.DetectWall ()
-            t = time.time ()
             self.MakeDirsMap ( self.mpos, self.mdir, target, search_unknown )
-            te = time.time ()
-            # print "Time for MakeDirsMap=", te - t
-            t = te
             target = self.GetTarget ()
             # self.DrawDirsMap ()
             # self.DrawDistanceMap ()
@@ -1349,22 +1369,32 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
             trace_start = target 
             trace_target = self.mpos
             self.TraceRoute ( trace_start, trace_target )
-            te = time.time ()
-            # print "Time for TraceRoute=", te - t
-            t = te
             self.ClearRoutes () 
             self.SetRoutes ( 1 ) 
             self.DrawRoutes () 
-            te = time.time ()
-            # print "Time for DrawRoute=", te - t
-            t = te
 
             route_dirs = self.TraceTurn
             turn = route_dirs [ -1 ]
-            self.DoMoveTurn ( turn ) 
-            te = time.time ()
-            # print "Time for Move=", te - t
-            t = te
+
+            if turn == Turns [ 'T0' ]:
+                moves = self.MakeFastRoute ( False, False )
+                pre_dist = 0
+                while moves and moves [ -1 ] [ 0 ] != 'F_T0':
+                    pre_dist = self.TurnDistance [ moves [ -1 ] [ 0 ] ] [ 0 ]
+                    del moves [ -1 ]
+
+                # if moves and ( len ( moves ) > 1 or ( moves [ 0 ] [ 1 ] > self.block ) ) :
+                if moves:
+                    moves [ -1 ] [ 1 ] = moves [ -1 ] [ 1 ] - pre_dist
+                    for move in moves:
+                        self.GetCommnad ()
+                        self.DoMove ( MouseMoves [ move [ 0 ] ], move [ 1 ] )
+                        # self.Running = False
+                        self.mpos = move [ 2 ]
+                else:
+                    self.DoMoveTurn ( turn ) 
+            else:
+                self.DoMoveTurn ( turn ) 
 
         self.SetTarget ( target )
 
@@ -1415,32 +1445,96 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
             else:
                 search_unknown = True
 
+            #====== Go to unknown position 
+            self.MakeDirsMap ( self.mpos, self.mdir, None, search_unknown )
+
             if Found:
                 target = spos
             else:
                 target = self.GetVisitPosition ()
-
-            #====== Go to unknown position 
-            self.MakeDirsMap ( self.mpos, self.mdir, target, search_unknown )
 
             trace_start = target 
             trace_target = self.mpos
             self.TraceRoute ( trace_start, trace_target )
             self.SetRoutes ( 1 ) 
             self.DrawRoutes () 
-
             route_dirs = self.TraceTurn
             turn = route_dirs [ -1 ]
-            self.DoMoveTurn ( turn ) 
+
+            if False:
+                moves = self.MakeFastRoute ( False, True )
+                if moves:
+                    for move in moves:
+                        self.GetCommnad ()
+                        self.DoMove ( MouseMoves [ move [ 0 ] ], move [ 1 ] )
+                        # self.Running = False
+                        self.mpos = move [ 2 ]
+            else:
+                if turn == Turns [ 'T0' ]:
+                    moves = self.MakeFastRoute ( False, False )
+                    pre_dist = 0
+                    while moves and moves [ -1 ] [ 0 ] != 'F_T0':
+                        pre_dist = self.TurnDistance [ moves [ -1 ] [ 0 ] ] [ 0 ]
+                        del moves [ -1 ]
+
+                    if moves:
+                        moves [ -1 ] [ 1 ] = moves [ -1 ] [ 1 ] - pre_dist
+                        for move in moves:
+                            self.GetCommnad ()
+                            self.DoMove ( MouseMoves [ move [ 0 ] ], move [ 1 ] )
+                            # self.Running = False
+                            self.mpos = move [ 2 ]
+                    else:
+                        self.DoMoveTurn ( turn ) 
+                else:
+                    self.DoMoveTurn ( turn ) 
 
         self.ClearRoutes () 
         self.DrawRoutes () 
         self.DoMoveTurn ( TSTOP )
 
+    def RunFastestToHome ( self, spos, sdir, tpos ):
+        maze = self.m_Maze
+
+        self.DoMove ( MOVE_START )
+        while self.mpos != tpos:
+            self.GetCommnad ()
+
+            self.MakeDirsMap ( self.mpos, self.mdir, tpos, False )
+
+            self.TraceRoute ( tpos, self.mpos )
+            self.ClearRoutes () 
+            self.SetRoutes ( 1 ) 
+            self.DrawRoutes () 
+            route_dirs = self.TraceTurn
+            turn = route_dirs [ -1 ]
+
+            if turn == Turns [ 'T0' ]:
+                moves = self.MakeFastRoute ( False, False )
+                pre_dist = 0
+                while moves and moves [ -1 ] [ 0 ] != 'F_T0':
+                    pre_dist = self.TurnDistance [ moves [ -1 ] [ 0 ] ] [ 0 ]
+                    del moves [ -1 ]
+
+                if moves:
+                    moves [ -1 ] [ 1 ] = moves [ -1 ] [ 1 ] - pre_dist
+                    for move in moves:
+                        self.GetCommnad ()
+                        self.DoMove ( MouseMoves [ move [ 0 ] ], move [ 1 ] )
+                        # self.Running = False
+                        self.mpos = move [ 2 ]
+                else:
+                    self.DoMoveTurn ( turn ) 
+            else:
+                self.DoMoveTurn ( turn ) 
+
+        self.DoMoveTurn ( TSTOP )
+        self.ReDrawRoutes ()
+
     def RunFastest( self, spos, sdir, tpos, add_stop ):
         maze = self.m_Maze
 
-        print "RunFastest###", spos, sdir, tpos
+        # print "RunFastest###", spos, sdir, tpos
         self.MakeDirsMap ( spos, sdir, tpos, False )
         self.TraceRoute ( tpos, spos )
         self.ClearRoutes () 
@@ -1451,9 +1545,9 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         moves = self.MakeFastRoute ( add_start, add_stop )
 
         for move in moves:
-            print move
+            # print move
             self.GetCommnad ()
-            self.DoMove ( MouseMoves [ move [ 0 ] ], move [ 1 ], last_speed = 0, accel = 0 )
+            self.DoMove ( MouseMoves [ move [ 0 ] ], move [ 1 ] )
             # self.Running = False
 
         if add_stop:
@@ -1462,7 +1556,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
             self.mpos = tpos
 
         self.ReDrawRoutes ()
-        print 'RunFastest: last position', self.mpos
+        # print 'RunFastest: last position', self.mpos
 
     def GetCommnad ( self ):
         if self.Running:
@@ -1490,7 +1584,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         self.WallMarks = [ 0 ] * len (self.Walls)
         self.InitAllTarget ()
         start = self.GetStart ()
-        print "MouseMain: start", start
+        # print "MouseMain: start", start
         self.mpos = start
         self.mdir = Directions [ 'N' ]
         # self.DetectAllWalls ()
@@ -1498,12 +1592,14 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         print "############### First Running #################"
         self.FastestFirstRun = self.EnableFastestFirstRun
         self.InitRun ()
+        self.SetFastRunParam ( 4, self.FirstRunVelocity , 10, -20 )
         self.RunToTarget ( True )
         if not self.FastestFirstRun:
             time.sleep ( 1 )
 
         print "############### Search shortest path #################"
         self.InitRun ()
+        self.SetFastRunParam ( 4, self.FirstRunVelocity , 10, -20 )
         self.RunForSearch ( start, 0, self.GetTarget () ) 
         if not self.FastestFirstRun:
             time.sleep ( 1 )
@@ -1512,12 +1608,15 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         while ( 1 ):
             print "############### Second running #################"
             self.InitRun ()
+            self.SetFastRunParam ( 4, 2, 20, -40 )
             self.RunFastest( self.mpos, self.mdir, self.GetTarget (), True )
             time.sleep ( 1 )
 
-            print "############### Second comming home #################"
+            print "############### Second comming back home #################"
             self.InitRun ()
-            self.RunFastest( self.mpos, self.mdir, start, True )
+            self.SetFastRunParam ( 4, 1, 10, -20 )
+            self.RunFastestToHome ( self.mpos, self.mdir, start )
+            # self.RunFastest( self.mpos, self.mdir, start, True )
             time.sleep ( 1 )
             self.Running = False
 
