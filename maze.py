@@ -17,7 +17,7 @@ from    struct import *
 from    array import *
 from    math  import *
 import  re
-import  thread
+import  threading
 from    scipy import integrate
 import  numpy as N
 
@@ -1151,30 +1151,30 @@ class MazePanel(wx.Panel):
     def AddToolbarFile(self, tb):
         tsize = (24,24)
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_NEW, "New", bmp, shortHelp="New file", longHelp="")
+        tb.AddTool(wx.ID_NEW, "New", bmp, shortHelp="New file", longHelp="")
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_NEW)
 
         bmp = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, tsize)
-        tb.AddLabelTool(wx.ID_OPEN, "Open", bmp, shortHelp="Open file", longHelp="")
+        tb.AddTool(wx.ID_OPEN, "Open", bmp, shortHelp="Open file", longHelp="")
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_OPEN)
 
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_SAVE, "Save", bmp, shortHelp="Save file", longHelp="")
+        tb.AddTool(wx.ID_SAVE, "Save", bmp, shortHelp="Save file", longHelp="")
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVE)
         tb.EnableTool(wx.ID_SAVE, False)
 
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_SAVEAS, "Save As", bmp, shortHelp="Save file as", longHelp="")
+        tb.AddTool(wx.ID_SAVEAS, "Save As", bmp, shortHelp="Save file as", longHelp="")
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVEAS)
 
         tb.AddSeparator()
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_UNDO, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_UNDO, "Undo", bmp, shortHelp="Undo", longHelp="")
+        tb.AddTool(wx.ID_UNDO, "Undo", bmp, shortHelp="Undo", longHelp="")
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_UNDO)
         tb.EnableTool(wx.ID_UNDO, False)
 
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_REDO, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_REDO, "Redo", bmp, shortHelp="Redo", longHelp="")
+        tb.AddTool(wx.ID_REDO, "Redo", bmp, shortHelp="Redo", longHelp="")
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_REDO)
         tb.EnableTool(wx.ID_REDO, False)
 
@@ -1194,7 +1194,7 @@ class MazePanel(wx.Panel):
     def AddToolbarZoomButton(self, tb):
         tb.AddSeparator()
         bmp = wx.Bitmap ( "fit.png" )
-        tool = tb.AddLabelTool(wx.ID_ANY, "Fit", bmp, shortHelp="Fit", longHelp="")
+        tool = tb.AddTool(wx.ID_ANY, "Fit", bmp, shortHelp="Fit", longHelp="")
         self.Bind(wx.EVT_TOOL, self.ZoomToFit, tool)
 
     def BuildToolbar(self):
@@ -1220,9 +1220,9 @@ class MazePanel(wx.Panel):
         elif self.EditMode == "Erase":
             self.SetCursor ( True, self.m_Colors [ 'WallDetected'] )
         elif self.EditMode == "Start":
-            print "start"
+            print("start")
         elif self.EditMode == "Target":
-            print "target"
+            print("target")
         else:
             self.SetCursor ( False )
         self.Canvas.SetFocus()
@@ -1329,7 +1329,7 @@ class MazePanel(wx.Panel):
             self.MoveCursor ( xy )
 
         elif self.EditMode == "Start":
-            print "set start"
+            print("set start")
 
         elif self.EditMode == "Target":
             xy = event.GetPosition()
@@ -1408,7 +1408,7 @@ class MazePanel(wx.Panel):
             self.m_TargetXY = [ 255, 255 ]
         else:
             self.m_TargetXY = pos
-        print "set target:", self.m_TargetXY
+        print("set target:", self.m_TargetXY)
 
     def SetTargetSection ( self, pt, start ):
         pos = ( int ( ( pt [ 0 ] - pw/2 ) / bw ), int ( ( pt [ 1 ] - pw/2 ) / bw ) )
@@ -1437,7 +1437,7 @@ class MazePanel(wx.Panel):
         p = ( pt [ 0 ] - cw, pt [ 1 ] + cw )
         pos = ( int ( ( pt [ 0 ] - pw/2 ) / bw ), int ( ( pt [ 1 ] - pw/2 ) / bw ) )
         spot = ( pt [ 0 ] - cw, pt [ 1 ] - cw, cw*2, cw*2 )
-        print pos, spot
+        print(pos, spot)
         
         wall = self.GetNWallRect( pos )
         if IsOverlaps ( spot, wall ):
@@ -1462,7 +1462,7 @@ class MazePanel(wx.Panel):
             self.SetWall ( wall, wall_type, True )
 
             self.ToolBar.EnableTool(wx.ID_REDO, True)
-            print "undo", undoindex, wall
+            print("undo", undoindex, wall)
             if undoindex:
                 self.ToolBar.EnableTool(wx.ID_UNDO, True)
             else:
@@ -1479,7 +1479,7 @@ class MazePanel(wx.Panel):
             self.SetWall ( wall, wall_type, True )
             undoindex = undoindex + 1
 
-            print "redo", undoindex, wall
+            print("redo", undoindex, wall)
             self.ToolBar.EnableTool(wx.ID_UNDO, True)
             if undoindex < len ( undo ):
                 self.ToolBar.EnableTool(wx.ID_REDO, True)
@@ -1844,7 +1844,7 @@ class ControlPanel(wx.Panel):
 
     def OnEnableRoutes ( self, event ):
         maze = self.m_Maze
-        print event.IsChecked() 
+        print(event.IsChecked())
         maze.EnableRoutes ( event.IsChecked() )
 
     def OnClickSetting(self, event):
@@ -1972,7 +1972,7 @@ class AppFrame(wx.Frame):
         
     def OnKeyDown(self, evt):
         keycode = evt.GetKeyCode()
-        print "Frame KeyDown=", keycode
+        print("Frame KeyDown=", keycode)
 
     def PostInit(self):
         maze = wx.FindWindowById ( ID_WINDOW_MAZE, None )

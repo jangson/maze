@@ -180,14 +180,14 @@ class AppFrame(wx.Frame):
     def InitEnv ( self, xy = None, angle = None ):
         #-----------------------------------
         if self.MazeClassic :
-            print "classic"
+            print("classic")
             MOUSE_WHEEL_WIDTH = 0.060
             MOUSE_WIDTH = 0.060
             MOUSE_HEIGHT = 0.070
             MAZE_BLOCK = 0.18
             MAZE_POLL = 0.012
         else:
-            print "half"
+            print("half")
             MOUSE_WHEEL_WIDTH = 0.030
             MOUSE_WIDTH = 0.030
             MOUSE_HEIGHT = 0.035
@@ -393,14 +393,14 @@ class AppFrame(wx.Frame):
 
         self.drawedtime = self.currtime 
         self.DrawMouse ( pc, angle, 'Green' )
-        print "RT/T=%.3f,%.3f,A=%.2f,VL/VR=%.3f,%.3f,S/SL/SR=%.3f,%3.f,%.3f,DX,DY=%.3f,%.3f" % ( 
+        print("RT/T=%.3f,%.3f,A=%.2f,VL/VR=%.3f,%.3f,S/SL/SR=%.3f,%3.f,%.3f,DX,DY=%.3f,%.3f" % ( 
                 time.time ()-self.starttime, 
                 self.currtime - self.starttime, 
                 degrees ( self.angle ),
                 self.vl, self.vr, 
                 sc * 1000, self.sl * 1000, self.sr * 1000,
                 x, y
-                )
+                ))
 
     def GetTimeWithAccel ( self, a, s, v0 ):
         if a == 0:
@@ -493,9 +493,9 @@ class AppFrame(wx.Frame):
 
         x = ( block * 1 - (poll/2) )
         y = ( block * 1 - (poll/2) ) + block / 2
-        print "pr", self.pc
-        print "Over X", x - self.pc [ 0 ]
-        print "Over y", self.pc [ 1 ] - y
+        print("pr", self.pc)
+        print("Over X", x - self.pc [ 0 ])
+        print("Over y", self.pc [ 1 ] - y)
 
     def OnBtn4 (self, evt = None):
         block = self.block
@@ -509,9 +509,9 @@ class AppFrame(wx.Frame):
 
         x = ( block * 1 - (poll/2) )
         y = ( block * 1 - (poll/2) ) + block / 2
-        print "pr", self.pc
-        print "Over X", x - self.pc [ 0 ]
-        print "Over y", self.pc [ 1 ] - y
+        print("pr", self.pc)
+        print("Over X", x - self.pc [ 0 ])
+        print("Over y", self.pc [ 1 ] - y)
 
     def OnBtn5 (self, evt = None):
         pass
@@ -533,13 +533,13 @@ class AppFrame(wx.Frame):
         self.MoveTurnAccel ( 45, True )
         self.MoveWithAccelDistance ( 0, diag + self.e2.GetValue ()) # +0.0788
 
-        print "pr", self.pc
+        print("pr", self.pc)
         x = x + 1 * block/2 - self.pc [ 0 ] 
         y = y + 1 * block - self.pc [ 1 ]
-        print "X:", x
-        print "Y:", y
-        print "X+Y:", x+y
-        print "X-Y:", x-y
+        print("X:", x)
+        print("Y:", y)
+        print("X+Y:", x+y)
+        print("X-Y:", x-y)
 
     def OnBtn90 (self, evt = None):
         block = self.block
@@ -555,13 +555,13 @@ class AppFrame(wx.Frame):
         self.MoveTurnAccel ( 90, True )
         self.MoveWithAccelDistance ( 0, block - self.e2.GetValue () ) # -0.024
 
-        print "pr", self.pc
+        print("pr", self.pc)
         x = x + 1 * block/2 - self.pc [ 0 ] 
         y = y + 1 * block - self.pc [ 1 ]
-        print "X:", x
-        print "Y:", y
-        print "X+Y:", x+y
-        print "X-Y:", x-y
+        print("X:", x)
+        print("Y:", y)
+        print("X+Y:", x+y)
+        print("X-Y:", x-y)
 
     def OnBtn135 (self, evt = None):
         block = self.block
@@ -577,13 +577,13 @@ class AppFrame(wx.Frame):
         self.MoveTurnAccel ( 135, True )
         self.MoveWithAccelDistance ( 0, diag ) # 0
 
-        print "pr", self.pc
+        print("pr", self.pc)
         x = x + 1 * block/2 - self.pc [ 0 ] 
         y = y + 1 * block - self.pc [ 1 ]
-        print "X:", x
-        print "Y:", y
-        print "X+Y:", x+y
-        print "X-Y:", x-y
+        print("X:", x)
+        print("Y:", y)
+        print("X+Y:", x+y)
+        print("X-Y:", x-y)
 
     def OnBtn180 (self, evt = None):
         block = self.block
@@ -599,13 +599,13 @@ class AppFrame(wx.Frame):
         self.MoveTurnAccel ( 180, True )
         self.MoveWithAccelDistance ( 0, block - self.e2.GetValue () ) # -0.06
 
-        print "pr", self.pc
+        print("pr", self.pc)
         x = x + 1 * block/2 - self.pc [ 0 ] 
         y = y + 1 * block - self.pc [ 1 ]
-        print "X:", x
-        print "Y:", y
-        print "X+Y:", x+y
-        print "X-Y:", x-y
+        print("X:", x)
+        print("Y:", y)
+        print("X+Y:", x+y)
+        print("X-Y:", x-y)
 
     def OnBtnDiagTo45 (self, evt = None):
         block = self.block
@@ -621,13 +621,13 @@ class AppFrame(wx.Frame):
         self.MoveTurnAccel ( 45, True )
         self.MoveWithAccelDistance ( 0, block - self.e2.GetValue () ) # -0.049
 
-        print "pr", self.pc
+        print("pr", self.pc)
         x = x + 1 * block - self.pc [ 0 ] 
         y = y + 2 * block - self.pc [ 1 ]
-        print "X:", x
-        print "Y:", y
-        print "X+Y:", x+y
-        print "X-Y:", x-y
+        print("X:", x)
+        print("Y:", y)
+        print("X+Y:", x+y)
+        print("X-Y:", x-y)
 
     def OnBtnDiagTo90 (self, evt = None):
         block = self.block
@@ -645,14 +645,14 @@ class AppFrame(wx.Frame):
         self.MoveTurnAccel ( 90, True )
         self.MoveWithAccelDistance ( 0, diag + diag/2 - self.e2.GetValue () ) # +diag/2-0.05
 
-        print diag/2
-        print "pr", self.pc
+        print(diag/2)
+        print("pr", self.pc)
         x = x + 2 * block - self.pc [ 0 ] 
         y = y + 1 * block - self.pc [ 1 ]
-        print "X:", x
-        print "Y:", y
-        print "X+Y:", x+y
-        print "X-Y:", x-y
+        print("X:", x)
+        print("Y:", y)
+        print("X+Y:", x+y)
+        print("X-Y:", x-y)
     
     def OnBtnDiagTo135 (self, evt = None):
         block = self.block
@@ -669,13 +669,13 @@ class AppFrame(wx.Frame):
         self.MoveTurnAccel ( 135, True )
         self.MoveWithAccelDistance ( 0, block - self.e2.GetValue () ) # 0.075
 
-        print "pr", self.pc
+        print("pr", self.pc)
         x = x + 2 * block - self.pc [ 0 ] 
         y = y + 0 * block - self.pc [ 1 ]
-        print "X:", x
-        print "Y:", y
-        print "X+Y:", x+y
-        print "X-Y:", x-y
+        print("X:", x)
+        print("Y:", y)
+        print("X+Y:", x+y)
+        print("X-Y:", x-y)
 
 g_r = 1   # using wheel velocity instead of angluar velocity v = w * r
 g_vl0 = g_vr0 = 0.
