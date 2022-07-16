@@ -1642,7 +1642,7 @@ class Mouse(MouseBrain):
 
         self.Started = False
         self.Running = False
-        self.CmdQueue = Queue.Queue(5)
+        self.CmdQueue = queue.Queue(5)
 
     #-----------------------------------------------------------------------
     # Methods for draw mouse 

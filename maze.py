@@ -1151,38 +1151,41 @@ class MazePanel(wx.Panel):
     def AddToolbarFile(self, tb):
         tsize = (24,24)
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)        
-        tb.AddTool(wx.ID_NEW, "New", bmp, shortHelp="New file", longHelp="")
+        tb.AddTool(wx.ID_NEW, "New", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_NEW)
 
         bmp = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, tsize)
-        tb.AddTool(wx.ID_OPEN, "Open", bmp, shortHelp="Open file", longHelp="")
+        tb.AddTool(wx.ID_OPEN, "Open", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_OPEN)
 
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, tsize)        
-        tb.AddTool(wx.ID_SAVE, "Save", bmp, shortHelp="Save file", longHelp="")
+        tb.AddTool(wx.ID_SAVE, "Save", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVE)
         tb.EnableTool(wx.ID_SAVE, False)
 
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, tsize)        
-        tb.AddTool(wx.ID_SAVEAS, "Save As", bmp, shortHelp="Save file as", longHelp="")
+        tb.AddTool(wx.ID_SAVEAS, "Save As", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVEAS)
 
         tb.AddSeparator()
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_UNDO, wx.ART_TOOLBAR, tsize)        
-        tb.AddTool(wx.ID_UNDO, "Undo", bmp, shortHelp="Undo", longHelp="")
+        tb.AddTool(wx.ID_UNDO, "Undo", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_UNDO)
         tb.EnableTool(wx.ID_UNDO, False)
 
         bmp =  wx.ArtProvider.GetBitmap(wx.ART_REDO, wx.ART_TOOLBAR, tsize)        
-        tb.AddTool(wx.ID_REDO, "Redo", bmp, shortHelp="Redo", longHelp="")
+        tb.AddTool(wx.ID_REDO, "Redo", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_REDO)
         tb.EnableTool(wx.ID_REDO, False)
 
     def AddToolbarModeButtons(self, tb, Modes):
         tb.AddSeparator()
         self.ModesDict = {}
+        tsize = (24,24)
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)        
+
         for Mode in Modes:
-            tool = tb.AddRadioTool(wx.ID_ANY, shortHelp=Mode[0], bitmap=Mode[2])
+            tool = tb.AddRadioTool(wx.ID_ANY, "Test1", bmp)
             self.Bind(wx.EVT_TOOL, self.SetMode, tool)
             self.ModesDict[tool.GetId()] = ( Mode[1 ], Mode[0] )
 
@@ -1194,7 +1197,7 @@ class MazePanel(wx.Panel):
     def AddToolbarZoomButton(self, tb):
         tb.AddSeparator()
         bmp = wx.Bitmap ( "fit.png" )
-        tool = tb.AddTool(wx.ID_ANY, "Fit", bmp, shortHelp="Fit", longHelp="")
+        tool = tb.AddTool(wx.ID_ANY, "Fit", bmp)
         self.Bind(wx.EVT_TOOL, self.ZoomToFit, tool)
 
     def BuildToolbar(self):
