@@ -938,6 +938,7 @@ class MazePanel(wx.Panel):
         CheckSum        = 0
 
         # Make buffer and write header to buffer
+        '''
         pack_into( "4sI13B256xB", self.m_MazeFileData, 0,
             Sign,
             HeaderSize,
@@ -956,6 +957,7 @@ class MazePanel(wx.Panel):
             TargetSectionEY,
             CheckSum
         )
+        '''
 
         # Calculation check-sum and write it to buffer
         CheckSum = 0
@@ -992,6 +994,7 @@ class MazePanel(wx.Panel):
         CheckSum        = 0
 
         # Make buffer and write header to buffer
+        '''
         FileData = array ( 'B', (0 for x in range(HeaderSize) ) )
         pack_into( "4sI13B256xB", FileData, 0,
             Sign,
@@ -1020,12 +1023,13 @@ class MazePanel(wx.Panel):
         FileData [ -1 ] = CheckSum
 
         # Adding data 
-        DataSize = Width * Height 
+        DataSize = Width * Height
         FileData.extend( ( 0 for x in range(DataSize) ) )
         self.m_MazeFileData = FileData
-        self.m_MazeData = FileData [calcsize("4sI13B256xB"):] 
+        self.m_MazeData = FileData [calcsize("4sI13B256xB"):]
         self.SetFileName ()
-        self.SetMazeFromFileData () 
+        self.SetMazeFromFileData ()
+        '''
 
     def FileSaveMaze ( self ):
         self.WriteMaze ()
