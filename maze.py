@@ -1733,7 +1733,7 @@ class ControlPanel(wx.Panel):
         self.fileidx     = il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE, wx.ART_OTHER, isz))
 
         self.root = self.tree.AddRoot(self.m_Path)
-        self.tree.SetPyData(self.root, None)
+        self.tree.SetItemData(self.root, None)
         self.tree.SetItemImage(self.root, self.fldridx, wx.TreeItemIcon_Normal)
         self.tree.SetItemImage(self.root, self.fldropenidx, wx.TreeItemIcon_Expanded)        
 
@@ -1770,7 +1770,7 @@ class ControlPanel(wx.Panel):
             dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
             dlg.ShowModal()
             dlg.Destroy()
-            return;
+            return
 
         for f in flist:
             next = os.path.join(path, f)
@@ -1794,7 +1794,7 @@ class ControlPanel(wx.Panel):
             dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
             dlg.ShowModal()
             dlg.Destroy()
-            return;
+            return
 
         for f in flist:
             next = os.path.join(path, f)
@@ -1802,7 +1802,7 @@ class ControlPanel(wx.Panel):
             if os.path.isdir(next):
                 # directory
                 child = self.tree.AppendItem(parent, name)
-                self.tree.SetPyData(child, None)
+                self.tree.SetItemData(child, None)
                 self.tree.SetItemImage(child, self.fldridx, wx.TreeItemIcon_Normal)
                 self.tree.SetItemImage(child, self.fldropenidx, wx.TreeItemIcon_Expanded)
 
@@ -1815,7 +1815,7 @@ class ControlPanel(wx.Panel):
                 if ext == filter_ext:
                     l = len ( self.m_Path )
                     item = self.tree.AppendItem ( parent, name )
-                    self.tree.SetPyData(item, None)
+                    self.tree.SetItemData(item, None)
                     self.tree.SetItemImage(item, self.fileidx, wx.TreeItemIcon_Normal)
                     self.tree.SetItemImage(item, self.fileidx, wx.TreeItemIcon_Selected)
                     # self.maze_list.InsertStringItem (0, next [ l+1: ] )
