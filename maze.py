@@ -938,9 +938,8 @@ class MazePanel(wx.Panel):
         CheckSum        = 0
 
         # Make buffer and write header to buffer
-        '''
         pack_into( "4sI13B256xB", self.m_MazeFileData, 0,
-            Sign,
+            bytes(Sign, "utf-8"),
             HeaderSize,
             Version,
             Width,
@@ -957,7 +956,6 @@ class MazePanel(wx.Panel):
             TargetSectionEY,
             CheckSum
         )
-        '''
 
         # Calculation check-sum and write it to buffer
         CheckSum = 0
@@ -994,25 +992,24 @@ class MazePanel(wx.Panel):
         CheckSum        = 0
 
         # Make buffer and write header to buffer
-        '''
         FileData = array ( 'B', (0 for x in range(HeaderSize) ) )
         pack_into( "4sI13B256xB", FileData, 0,
-            Sign,
-            HeaderSize,
-            Version,
-            Width,
-            Height,
-            BlockWidth,
-            WallThick,
-            StartX,
-            StartY,
-            TargetX,
-            TargetY,
-            TargetSectionSX,
-            TargetSectionSY,
-            TargetSectionEX,
-            TargetSectionEY,
-            CheckSum
+            bytes(Sign, "utf-8"),       # 4s
+            HeaderSize, # I
+            Version,    # 13B..1
+            Width,      # 13B..2
+            Height,     # 13B..3
+            BlockWidth, # 13B..4
+            WallThick,  # 13B..5
+            StartX,     # 13B..6
+            StartY,     # 13B..7
+            TargetX,    # 13B..8
+            TargetY,    # 13B..9
+            TargetSectionSX,    # 13B..10
+            TargetSectionSY,    # 13B..11
+            TargetSectionEX,    # 13B..12
+            TargetSectionEY,    # 13B..13
+            CheckSum    # B
         )
 
         # Calculation check-sum and write it to buffer
@@ -1029,7 +1026,6 @@ class MazePanel(wx.Panel):
         self.m_MazeData = FileData [calcsize("4sI13B256xB"):]
         self.SetFileName ()
         self.SetMazeFromFileData ()
-        '''
 
     def FileSaveMaze ( self ):
         self.WriteMaze ()
@@ -1809,7 +1805,7 @@ class ControlPanel(wx.Panel):
                 self.AddFilesInDir ( next, child )
             else:
                 # file
-                
+
                 ext = os.path.splitext(next)[-1]
                 ext = ext.lower()
                 if ext == filter_ext:
