@@ -378,12 +378,10 @@ class MazePanel(wx.Panel):
         self.AddWallObject ( None ) 
 
     def MakeLookUpWall (self):
-        print("[",inspect.currentframe().f_lineno,"] RUN MakeLookUpWall")
+        # print("[",inspect.currentframe().f_lineno,"] RUN MakeLookUpWall")
         lookup = []
         ( w, h ) = self.m_MazeSize
         rcnt = ( w + 1 ) * 2
-        print("[",inspect.currentframe().f_lineno,"] m_MazeSize = ", self.m_MazeSize)
-        print("[",inspect.currentframe().f_lineno,"] rcnt = ", rcnt, ", w = ", w, ", h = ", h)
 
         for y in range(0, h):
             row = []
@@ -484,8 +482,8 @@ class MazePanel(wx.Panel):
         return self.m_TypeWalls [ index ]
     
     def SetWallXY (self, xy, nesw, wall, draw = True):
-        print("[",inspect.currentframe().f_lineno,"] RUN SetWallXY")
-        index = self.m_LookupWall [ xy [ 1 ] ] [ xy [ 0 ] ] [ nesw ]
+        # print("[",inspect.currentframe().f_lineno,"] RUN SetWallXY")
+        index = self.m_LookupWall [ int(xy [ 1 ]) ] [ xy [ 0 ] ] [ nesw ]
         self.m_TypeWalls [ index ] = wall
         if draw:
             self.DrawWall ( index, draw ) 
@@ -1810,7 +1808,7 @@ class ControlPanel(wx.Panel):
                     self.maze_list.InsertStringItem (0, next [ l+1: ] )
 
     def AddFilesInDir(self, path, parent):
-        print("[",inspect.currentframe().f_lineno,"] RUN AddFilesInDir")
+        # print("[",inspect.currentframe().f_lineno,"] RUN AddFilesInDir")
         if load_dir == True:
             return
         filter_ext = '.maz'
@@ -1827,7 +1825,7 @@ class ControlPanel(wx.Panel):
             next = os.path.join(path, f)
             name = next.split (os.sep) [ -1 ]
             if os.path.isdir(next):
-                print("[",inspect.currentframe().f_lineno,"] isdir")
+                # print("[",inspect.currentframe().f_lineno,"] isdir")
                 # directory
                 child = self.tree.AppendItem(parent, name)
                 self.tree.SetItemData(child, None)
@@ -1851,7 +1849,7 @@ class ControlPanel(wx.Panel):
 
     def LoadMazeList(self):
         global load_dir
-        print("[",inspect.currentframe().f_lineno,"] RUN LoadMazeList")
+        # print("[",inspect.currentframe().f_lineno,"] RUN LoadMazeList")
         self.AddFilesInDir(self.m_Path, self.root)
         self.tree.Expand(self.root)
         load_dir = True
