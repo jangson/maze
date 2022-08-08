@@ -35,11 +35,9 @@ class MyFloatCanvas(FloatCanvas.FloatCanvas):
         dc = wx.MemoryDC()
         dc.SelectObject(self._Buffer)
         dc.SetBackground(self.BackgroundBrush)
-        dc.BeginDrawing()
         WorldToPixel = self.WorldToPixel 
         ScaleWorldToPixel = self.ScaleWorldToPixel
         Object._Draw(dc, WorldToPixel, ScaleWorldToPixel, None)
-        dc.EndDrawing()
 
     def _DrawObjectScreen ( self, Object ):
         dc = wx.ClientDC(self) 

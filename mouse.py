@@ -1671,7 +1671,7 @@ class Mouse(MouseBrain):
 
     def MouseStart(self):
         self.Running = True
-        thread.start_new_thread ( self.MouseMain, () )
+        threading._start_new_thread ( self.MouseMain, () )
 
     def Pause(self, wait = False):
         run = self.IsRunning ()
