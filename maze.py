@@ -1013,6 +1013,7 @@ class MazePanel(wx.Panel):
         # Make buffer and write header to buffer
         FileData = array ( 'B', (0 for x in range(HeaderSize) ) )
         pack_into( "4sI13B256xB", FileData, 0,
+<<<<<<< HEAD
             bytes(Sign, "utf-8"),
             HeaderSize,
             Version,
@@ -1029,6 +1030,24 @@ class MazePanel(wx.Panel):
             TargetSectionEX,
             TargetSectionEY,
             CheckSum
+=======
+            bytes(Sign, "utf-8"),       # 4s
+            HeaderSize, # I
+            Version,    # 13B..1
+            Width,      # 13B..2
+            Height,     # 13B..3
+            BlockWidth, # 13B..4
+            WallThick,  # 13B..5
+            StartX,     # 13B..6
+            StartY,     # 13B..7
+            TargetX,    # 13B..8
+            TargetY,    # 13B..9
+            TargetSectionSX,    # 13B..10
+            TargetSectionSY,    # 13B..11
+            TargetSectionEX,    # 13B..12
+            TargetSectionEY,    # 13B..13
+            CheckSum    # B
+>>>>>>> 01f5845a2576e5b01271480a892eff132afb44b3
         )
 
         # Calculation check-sum and write it to buffer
@@ -1794,7 +1813,7 @@ class ControlPanel(wx.Panel):
             dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
             dlg.ShowModal()
             dlg.Destroy()
-            return;
+            return
 
         for f in flist:
             next = os.path.join(path, f)
@@ -1837,6 +1856,10 @@ class ControlPanel(wx.Panel):
                 self.AddFilesInDir ( next, child )
             else:
                 # file
+<<<<<<< HEAD
+=======
+
+>>>>>>> 01f5845a2576e5b01271480a892eff132afb44b3
                 ext = os.path.splitext(next)[-1]
                 ext = ext.lower()
                 if ext == filter_ext:
