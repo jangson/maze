@@ -1012,25 +1012,7 @@ class MazePanel(wx.Panel):
 
         # Make buffer and write header to buffer
         FileData = array ( 'B', (0 for x in range(HeaderSize) ) )
-        pack_into( "4sI13B256xB", FileData, 0,
-<<<<<<< HEAD
-            bytes(Sign, "utf-8"),
-            HeaderSize,
-            Version,
-            Width,
-            Height,
-            BlockWidth,
-            WallThick,
-            StartX,
-            StartY,
-            TargetX,
-            TargetY,
-            TargetSectionSX,
-            TargetSectionSY,
-            TargetSectionEX,
-            TargetSectionEY,
-            CheckSum
-=======
+        pack_into("4sI13B256xB", FileData, 0,
             bytes(Sign, "utf-8"),       # 4s
             HeaderSize, # I
             Version,    # 13B..1
@@ -1047,7 +1029,6 @@ class MazePanel(wx.Panel):
             TargetSectionEX,    # 13B..12
             TargetSectionEY,    # 13B..13
             CheckSum    # B
->>>>>>> 01f5845a2576e5b01271480a892eff132afb44b3
         )
 
         # Calculation check-sum and write it to buffer
@@ -1856,10 +1837,6 @@ class ControlPanel(wx.Panel):
                 self.AddFilesInDir ( next, child )
             else:
                 # file
-<<<<<<< HEAD
-=======
-
->>>>>>> 01f5845a2576e5b01271480a892eff132afb44b3
                 ext = os.path.splitext(next)[-1]
                 ext = ext.lower()
                 if ext == filter_ext:
