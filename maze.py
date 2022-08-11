@@ -106,8 +106,8 @@ class MazePanel(wx.Panel):
                 ("Pointer",  GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
                 ("Start",    GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
                 ("Target",   GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
-                ("Edit",     GUIMode.GUIMouse(),   wx.Bitmap ( "edit.png" )),
-                ("Erase",    GUIMode.GUIMouse(),   wx.Bitmap ( "erase.png" )),
+                ("Edit",     GUIMode.GUIMouse(),   wx.Bitmap ( "resource/edit.png" )),
+                ("Erase",    GUIMode.GUIMouse(),   wx.Bitmap ( "resource/erase.png" )),
                 ("Zoom In",  GUIMode.GUIZoomIn(),  Resources.getMagPlusBitmap()),
                 ("Zoom Out", GUIMode.GUIZoomOut(), Resources.getMagMinusBitmap()),
                 ("Pan",      GUIMode.GUIMove(),    Resources.getHandBitmap()),
@@ -603,9 +603,10 @@ class MazePanel(wx.Panel):
                     self.m_MousePoly.Hide ()
                 else:
                     self.Canvas._ClearObjectScreen ( self.m_MousePoly )
+                    ''' mouse color '''
                     self.m_MousePoly.SetPoints( points )
-                    self.m_MousePoly.SetLineColor ('Blue')
-                    self.m_MousePoly.SetFillColor ('Blue')
+                    self.m_MousePoly.SetLineColor ('Red')
+                    self.m_MousePoly.SetFillColor ('Red')
                     self.Canvas._DrawObjectScreen ( self.m_MousePoly )
 
         self.PanCanvasForObject ( self.m_MousePoly )
@@ -1219,7 +1220,7 @@ class MazePanel(wx.Panel):
 
     def AddToolbarZoomButton(self, tb):
         tb.AddSeparator()
-        bmp = wx.Bitmap ( "fit.png" )
+        bmp = wx.Bitmap ( "resource/fit.png" )
         tool = tb.AddTool(wx.ID_ANY, "Fit", bmp)
         self.Bind(wx.EVT_TOOL, self.ZoomToFit, tool)
 
