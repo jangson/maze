@@ -92,7 +92,7 @@ class MouseEnv():
         # maze property 
         self.block = 0.180
         self.poll = 0.012
-        self.MazeSize = ( 16, 16 )
+        self.MazeSize = MAZE_SIZE
         self.MazeStart = None
         self.MazeTarget = None
         self.MazeTargetSection = None 
@@ -640,7 +640,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
         self.RunCount = 0 # 1st, 1st return, 2st, 2st return
 
-        self.MazeSize = ( 16, 16 )
+        self.MazeSize = MAZE_SIZE
         self.MazeStart = None
         self.MazeTarget = None
         self.MazeTargetSection = None

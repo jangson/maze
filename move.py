@@ -6,7 +6,7 @@ This program display result in window and depend on wxPython.
 """
 import  sys, os
 import  time
-import  thread
+import  threading
 from    math  import *
 from    scipy import integrate
 import  wx.lib.masked           as masked
