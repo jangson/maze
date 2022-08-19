@@ -36,6 +36,15 @@ import logging
 
 logging.basicConfig(format='%(asctime)s.%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', datefmt='%d-%m-%Y:%H:%M:%S', level=logging.DEBUG)
 logger = logging.getLogger("logger_1")
+# log example
+## inspect
+# print("[",inspect.currentframe().f_lineno,"] RUN MakeLookUpWall")
+## logging
+# logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
+# logging.debug('This message should go to the log file')
+# logging.info('So should this')
+# logging.warning('And this, too')
+# logging.error('And non-ASCII stuff')
 
 #-------------------------------------------------------------------------------
 # Maze Panel 
@@ -1909,6 +1918,7 @@ class MainPanel(wx.Notebook):
 # log panel 
 class LogPanel(wx.Panel):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
+        print("[", inspect.currentframe().f_lineno, "] RUN LogPanel __init__")
         wx.Panel.__init__(self, parent, ID, style=style)
 
         sizer = wx.BoxSizer ( wx.HORIZONTAL )
@@ -1937,11 +1947,12 @@ ID_MENU_FILE_EXIT   = 102
 
 FRAME_SIZE_X = 800
 FRAME_SIZE_Y = 750
+FRAME_SIZE = (FRAME_SIZE_X, FRAME_SIZE_Y)
 
 class AppFrame(wx.Frame):
     def __init__(self, parent, title):
         # create frame
-        frame = wx.Frame.__init__(self, parent, ID_WINDOW_TOP_LEVEL, title, size=(FRAME_SIZE_X, FRAME_SIZE_Y))
+        frame = wx.Frame.__init__(self, parent, ID_WINDOW_TOP_LEVEL, title, size=FRAME_SIZE)
 
         # Prepare the menu bar
         menuBar = wx.MenuBar()

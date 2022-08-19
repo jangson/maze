@@ -649,11 +649,6 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
         self.FirstRunVelocity = 1.
 
-        # self.MaxAccel = 10.
-        # self.AccelStop = 5.
-        # self.MaxVelocity = 4.
-        # self.MaxTurnVelocity = 1.
- 
     def InitDirsMap ( self, search_unknown ):
         maze = self.m_Maze
         self.MouseBuffer = []
