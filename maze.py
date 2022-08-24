@@ -116,8 +116,8 @@ class MazePanel(wx.Panel):
                 ("Pointer",  GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
                 ("Start",    GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
                 ("Target",   GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
-                ("Edit",     GUIMode.GUIMouse(),   wx.Bitmap ( "resource/edit.png" )),
-                ("Erase",    GUIMode.GUIMouse(),   wx.Bitmap ( "resource/erase.png" )),
+                ("Edit",     GUIMode.GUIMouse(),   wx.Bitmap ("resource/edit.png")),
+                ("Erase",    GUIMode.GUIMouse(),   wx.Bitmap ("resource/erase.png")),
                 ("Zoom In",  GUIMode.GUIZoomIn(),  Resources.getMagPlusBitmap()),
                 ("Zoom Out", GUIMode.GUIZoomOut(), Resources.getMagMinusBitmap()),
                 ("Pan",      GUIMode.GUIMove(),    Resources.getHandBitmap()),
@@ -235,7 +235,7 @@ class MazePanel(wx.Panel):
 
     def LoadMouseImage ( self, filename = "mouse.png" ):
         if USE_MOUSE_IMAGE:
-            bmp = wx.Bitmap( filename )        
+            bmp = wx.Bitmap( filename )
             img = bmp.ConvertToImage()
             self.m_MouseImage = img 
 
@@ -609,7 +609,7 @@ class MazePanel(wx.Panel):
                                     LineColor = "Blue", 
                                     FillColor = "Blue",
                                     FillStyle = 'Solid',
-                                    InForeground = True)                            
+                                    InForeground = True)                    
                     self.m_MousePoly.Hide ()
                 else:
                     self.Canvas._ClearObjectScreen ( self.m_MousePoly )
@@ -1167,7 +1167,7 @@ class MazePanel(wx.Panel):
 
     def AddToolbarFile(self, tb):
         tsize = (24,24)
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)        
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)
         tb.AddTool(wx.ID_NEW, "New", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_NEW)
 
@@ -1175,22 +1175,22 @@ class MazePanel(wx.Panel):
         tb.AddTool(wx.ID_OPEN, "Open", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_OPEN)
 
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, tsize)        
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, tsize)
         tb.AddTool(wx.ID_SAVE, "Save", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVE)
         tb.EnableTool(wx.ID_SAVE, False)
 
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, tsize)        
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, tsize)
         tb.AddTool(wx.ID_SAVEAS, "Save As", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVEAS)
 
         tb.AddSeparator()
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_UNDO, wx.ART_TOOLBAR, tsize)        
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_UNDO, wx.ART_TOOLBAR, tsize) 
         tb.AddTool(wx.ID_UNDO, "Undo", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_UNDO)
         tb.EnableTool(wx.ID_UNDO, False)
 
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_REDO, wx.ART_TOOLBAR, tsize)        
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_REDO, wx.ART_TOOLBAR, tsize)
         tb.AddTool(wx.ID_REDO, "Redo", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_REDO)
         tb.EnableTool(wx.ID_REDO, False)
@@ -1199,12 +1199,11 @@ class MazePanel(wx.Panel):
         tb.AddSeparator()
         self.ModesDict = {}
         tsize = (24,24)
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)        
 
         for Mode in Modes:
-            tool = tb.AddRadioTool(wx.ID_ANY, "Test1", bmp)
+            tool = tb.AddRadioTool(wx.ID_ANY, "Test1", Mode[2])
             self.Bind(wx.EVT_TOOL, self.SetMode, tool)
-            self.ModesDict[tool.GetId()] = ( Mode[1 ], Mode[0] )
+            self.ModesDict[tool.GetId()] = ( Mode[1], Mode[0] )
 
         ch = wx.Choice ( tb, - 1, choices = "1 2 3 4 5 6 7 8".split(" ") )
         ch.SetSelection ( 0 )
@@ -1750,7 +1749,7 @@ class ControlPanel(wx.Panel):
         self.root = self.tree.AddRoot(self.m_Path)
         self.tree.SetItemData(self.root, None)
         self.tree.SetItemImage(self.root, self.fldridx, wx.TreeItemIcon_Normal)
-        self.tree.SetItemImage(self.root, self.fldropenidx, wx.TreeItemIcon_Expanded)        
+        self.tree.SetItemImage(self.root, self.fldropenidx, wx.TreeItemIcon_Expanded)
 
         self.tree.SetImageList(il)
         self.il = il
