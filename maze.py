@@ -1238,17 +1238,14 @@ class MazePanel(wx.Panel):
 
         self.Log(self.EditMode)
         if self.EditMode == "Edit":
-            print("Edit")
             self.SetCursor ( True, self.m_Colors [ 'WallExist'] )
         elif self.EditMode == "Erase":
-            print("Erase")
             self.SetCursor ( True, self.m_Colors [ 'WallDetected'] )
         elif self.EditMode == "Start":
-            print("start")
+            pass
         elif self.EditMode == "Target":
-            print("target")
+            pass
         else:
-            print("SetMode else")
             self.SetCursor ( False )
         self.Canvas.SetFocus()
 
