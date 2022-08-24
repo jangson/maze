@@ -1201,7 +1201,9 @@ class MazePanel(wx.Panel):
         tsize = (24,24)
 
         for Mode in Modes:
-            tool = tb.AddRadioTool(wx.ID_ANY, "Test1", Mode[2])
+            debug_log = "Mode[0] =" + Mode[0]
+            self.Log(debug_log)
+            tool = tb.AddRadioTool(wx.ID_ANY, Mode[0], Mode[2])
             self.Bind(wx.EVT_TOOL, self.SetMode, tool)
             self.ModesDict[tool.GetId()] = ( Mode[1], Mode[0] )
 
@@ -1234,6 +1236,7 @@ class MazePanel(wx.Panel):
         Mode = self.ModesDict[event.GetId()] [ 0 ]
         self.Canvas.SetMode(Mode)
 
+        self.Log(self.EditMode)
         if self.EditMode == "Edit":
             print("Edit")
             self.SetCursor ( True, self.m_Colors [ 'WallExist'] )
