@@ -17,23 +17,39 @@ from    struct import *
 from    array import *
 from    math  import *
 import  re
-import  thread
+import  threading
 from    scipy import integrate
 import  numpy as N
 
+# wxPython module
 import  wx
-import  wx.lib.newevent
 import  wx.lib.masked           as masked
-import  wx.lib.rcsizer          as rcs
 from    wx.lib.floatcanvas import FloatCanvas, Resources, GUIMode
 
+# user module
 import  mycanvas
 import  mouse
+
+# log module
+import inspect
+import logging
+
+logging.basicConfig(format='%(asctime)s.%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', datefmt='%d-%m-%Y:%H:%M:%S', level=logging.DEBUG)
+logger = logging.getLogger("logger_1")
+# log example
+## inspect
+# print("[",inspect.currentframe().f_lineno,"] RUN MakeLookUpWall")
+## logging
+# logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
+# logging.debug('This message should go to the log file')
+# logging.info('So should this')
+# logging.warning('And this, too')
+# logging.error('And non-ASCII stuff')
 
 #-------------------------------------------------------------------------------
 # Maze Panel 
 #-------------------------------------------------------------------------------
-
+load_dir = False
 USE_MOUSE_IMAGE = False
 DRAW_MOUSE = True
 
@@ -67,7 +83,7 @@ WALL_LU_E   = 1
 WALL_LU_S   = 2
 WALL_LU_W   = 3
 
-# Default size 
+# Default size
 MAZE_SIZE               = ( 16, 16 )
 MAZE_BLOCK_WIDTH        = 0.180   # 180 milimeter
 MAZE_POLL_WIDTH         = 0.012   # Real size is 12 mm
@@ -100,8 +116,8 @@ class MazePanel(wx.Panel):
                 ("Pointer",  GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
                 ("Start",    GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
                 ("Target",   GUIMode.GUIMouse(),   Resources.getPointerBitmap()),
-                ("Edit",     GUIMode.GUIMouse(),   wx.Bitmap ( "edit.png" )),
-                ("Erase",    GUIMode.GUIMouse(),   wx.Bitmap ( "erase.png" )),
+                ("Edit",     GUIMode.GUIMouse(),   wx.Bitmap ("resource/edit.png")),
+                ("Erase",    GUIMode.GUIMouse(),   wx.Bitmap ("resource/erase.png")),
                 ("Zoom In",  GUIMode.GUIZoomIn(),  Resources.getMagPlusBitmap()),
                 ("Zoom Out", GUIMode.GUIZoomOut(), Resources.getMagMinusBitmap()),
                 ("Pan",      GUIMode.GUIMove(),    Resources.getHandBitmap()),
@@ -219,7 +235,7 @@ class MazePanel(wx.Panel):
 
     def LoadMouseImage ( self, filename = "mouse.png" ):
         if USE_MOUSE_IMAGE:
-            bmp = wx.Bitmap( filename )        
+            bmp = wx.Bitmap( filename )
             img = bmp.ConvertToImage()
             self.m_MouseImage = img 
 
@@ -372,6 +388,7 @@ class MazePanel(wx.Panel):
         self.AddWallObject ( None ) 
 
     def MakeLookUpWall (self):
+        # print("[",inspect.currentframe().f_lineno,"] RUN MakeLookUpWall")
         lookup = []
         ( w, h ) = self.m_MazeSize
         rcnt = ( w + 1 ) * 2
@@ -475,7 +492,8 @@ class MazePanel(wx.Panel):
         return self.m_TypeWalls [ index ]
     
     def SetWallXY (self, xy, nesw, wall, draw = True):
-        index = self.m_LookupWall [ xy [ 1 ] ] [ xy [ 0 ] ] [ nesw ]
+        # print("[",inspect.currentframe().f_lineno,"] RUN SetWallXY")
+        index = self.m_LookupWall [ int(xy [ 1 ]) ] [ xy [ 0 ] ] [ nesw ]
         self.m_TypeWalls [ index ] = wall
         if draw:
             self.DrawWall ( index, draw ) 
@@ -591,13 +609,14 @@ class MazePanel(wx.Panel):
                                     LineColor = "Blue", 
                                     FillColor = "Blue",
                                     FillStyle = 'Solid',
-                                    InForeground = True)                            
+                                    InForeground = True)                    
                     self.m_MousePoly.Hide ()
                 else:
                     self.Canvas._ClearObjectScreen ( self.m_MousePoly )
+                    ''' mouse color '''
                     self.m_MousePoly.SetPoints( points )
-                    self.m_MousePoly.SetLineColor ('Blue')
-                    self.m_MousePoly.SetFillColor ('Blue')
+                    self.m_MousePoly.SetLineColor ('Red')
+                    self.m_MousePoly.SetFillColor ('Red')
                     self.Canvas._DrawObjectScreen ( self.m_MousePoly )
 
         self.PanCanvasForObject ( self.m_MousePoly )
@@ -755,12 +774,9 @@ class MazePanel(wx.Panel):
         self.m_TargetSection = ( ( CvrtPosition ( tssx ), CvrtPosition ( tssy ) ), ( CvrtPosition ( tsex ), CvrtPosition ( tsey ) ) )
 
         if ( old_size != self.m_MazeSize ):
-        # if ( old_size != self.m_MazeSize 
-           # or old_block != self.m_BlockWidth 
-           # or old_poll != self.m_PollWidth ) :
             # init maze
             self.InitMaze ()
-        self.DrawMaze () 
+        self.DrawMaze ()
 
     ########################################################################
     # Methods for reading maze file
@@ -840,6 +856,7 @@ class MazePanel(wx.Panel):
 
     def ReadMaze ( self, FileName, FileData ): 
         if len ( FileData ) < calcsize("4sI13B256xB"):
+            print("[",inspect.currentframe().f_lineno,"] Failed to ReadMaze = ", len(FileData), " < ", calcsize("4sI13B256xB"))
             return False
 
         # Make buffer and write data to buffer
@@ -862,10 +879,12 @@ class MazePanel(wx.Panel):
             CheckSum
         ) = unpack_from( "4sI13B256xB", FileData, 0)
 
-        if Sign != "MAZE":
+        if Sign != bytes("MAZE", "utf-8"):
+            print("[",inspect.currentframe().f_lineno,"] Sign(", Sign, ") != MAZE")
             return False
 
         if HeaderSize+Width*Height != len ( FileData ):
+            print("[",inspect.currentframe().f_lineno,"] HeaderSize+Width*Height(", HeaderSize + Width * Height, ") != len(", len(FileData), ")")
             return False
 
         CheckSum = 0
@@ -874,6 +893,7 @@ class MazePanel(wx.Panel):
         CheckSum = CheckSum & 0xff 
 
         if CheckSum: 
+            print("[",inspect.currentframe().f_lineno,"] Check Sum is False")
             return False
 
         old_size = self.m_MazeSize
@@ -893,9 +913,6 @@ class MazePanel(wx.Panel):
         self.m_UnDoIndex = 0
 
         if ( old_size != self.m_MazeSize ):
-        # if ( old_size != self.m_MazeSize 
-           # or old_block != self.m_BlockWidth 
-           # or old_poll != self.m_PollWidth ) :
             # init maze
             self.InitMaze ()
         self.SetMazeFromFileData () 
@@ -939,7 +956,7 @@ class MazePanel(wx.Panel):
 
         # Make buffer and write header to buffer
         pack_into( "4sI13B256xB", self.m_MazeFileData, 0,
-            Sign,
+            bytes(Sign, "utf-8"),
             HeaderSize,
             Version,
             Width,
@@ -993,23 +1010,23 @@ class MazePanel(wx.Panel):
 
         # Make buffer and write header to buffer
         FileData = array ( 'B', (0 for x in range(HeaderSize) ) )
-        pack_into( "4sI13B256xB", FileData, 0,
-            Sign,
-            HeaderSize,
-            Version,
-            Width,
-            Height,
-            BlockWidth,
-            WallThick,
-            StartX,
-            StartY,
-            TargetX,
-            TargetY,
-            TargetSectionSX,
-            TargetSectionSY,
-            TargetSectionEX,
-            TargetSectionEY,
-            CheckSum
+        pack_into("4sI13B256xB", FileData, 0,
+            bytes(Sign, "utf-8"),       # 4s
+            HeaderSize, # I
+            Version,    # 13B..1
+            Width,      # 13B..2
+            Height,     # 13B..3
+            BlockWidth, # 13B..4
+            WallThick,  # 13B..5
+            StartX,     # 13B..6
+            StartY,     # 13B..7
+            TargetX,    # 13B..8
+            TargetY,    # 13B..9
+            TargetSectionSX,    # 13B..10
+            TargetSectionSY,    # 13B..11
+            TargetSectionEX,    # 13B..12
+            TargetSectionEY,    # 13B..13
+            CheckSum    # B
         )
 
         # Calculation check-sum and write it to buffer
@@ -1020,12 +1037,12 @@ class MazePanel(wx.Panel):
         FileData [ -1 ] = CheckSum
 
         # Adding data 
-        DataSize = Width * Height 
+        DataSize = Width * Height
         FileData.extend( ( 0 for x in range(DataSize) ) )
         self.m_MazeFileData = FileData
-        self.m_MazeData = FileData [calcsize("4sI13B256xB"):] 
+        self.m_MazeData = FileData [calcsize("4sI13B256xB"):]
         self.SetFileName ()
-        self.SetMazeFromFileData () 
+        self.SetMazeFromFileData ()
 
     def FileSaveMaze ( self ):
         self.WriteMaze ()
@@ -1119,10 +1136,10 @@ class MazePanel(wx.Panel):
 
         if self.ReadMaze ( path, maze ):
             self.DrawMaze ()
-
         elif self.ReadMazeBinary ( path, maze ):
             self.DrawMaze ()
         else:
+            print("[",inspect.currentframe().f_lineno,"] Failed to ReadMaze")
             return
         self.SetFileName ()
 
@@ -1150,41 +1167,45 @@ class MazePanel(wx.Panel):
 
     def AddToolbarFile(self, tb):
         tsize = (24,24)
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_NEW, "New", bmp, shortHelp="New file", longHelp="")
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_NEW, wx.ART_TOOLBAR, tsize)
+        tb.AddTool(wx.ID_NEW, "New", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_NEW)
 
         bmp = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, tsize)
-        tb.AddLabelTool(wx.ID_OPEN, "Open", bmp, shortHelp="Open file", longHelp="")
+        tb.AddTool(wx.ID_OPEN, "Open", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_OPEN)
 
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_SAVE, "Save", bmp, shortHelp="Save file", longHelp="")
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, tsize)
+        tb.AddTool(wx.ID_SAVE, "Save", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVE)
         tb.EnableTool(wx.ID_SAVE, False)
 
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_SAVEAS, "Save As", bmp, shortHelp="Save file as", longHelp="")
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, tsize)
+        tb.AddTool(wx.ID_SAVEAS, "Save As", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_SAVEAS)
 
         tb.AddSeparator()
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_UNDO, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_UNDO, "Undo", bmp, shortHelp="Undo", longHelp="")
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_UNDO, wx.ART_TOOLBAR, tsize) 
+        tb.AddTool(wx.ID_UNDO, "Undo", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_UNDO)
         tb.EnableTool(wx.ID_UNDO, False)
 
-        bmp =  wx.ArtProvider.GetBitmap(wx.ART_REDO, wx.ART_TOOLBAR, tsize)        
-        tb.AddLabelTool(wx.ID_REDO, "Redo", bmp, shortHelp="Redo", longHelp="")
+        bmp =  wx.ArtProvider.GetBitmap(wx.ART_REDO, wx.ART_TOOLBAR, tsize)
+        tb.AddTool(wx.ID_REDO, "Redo", bmp)
         self.Bind(wx.EVT_TOOL, self.OnToolClick, id=wx.ID_REDO)
         tb.EnableTool(wx.ID_REDO, False)
 
     def AddToolbarModeButtons(self, tb, Modes):
         tb.AddSeparator()
         self.ModesDict = {}
+        tsize = (24,24)
+
         for Mode in Modes:
-            tool = tb.AddRadioTool(wx.ID_ANY, shortHelp=Mode[0], bitmap=Mode[2])
+            debug_log = "Mode[0] =" + Mode[0]
+            self.Log(debug_log)
+            tool = tb.AddRadioTool(wx.ID_ANY, Mode[0], Mode[2])
             self.Bind(wx.EVT_TOOL, self.SetMode, tool)
-            self.ModesDict[tool.GetId()] = ( Mode[1 ], Mode[0] )
+            self.ModesDict[tool.GetId()] = ( Mode[1], Mode[0] )
 
         ch = wx.Choice ( tb, - 1, choices = "1 2 3 4 5 6 7 8".split(" ") )
         ch.SetSelection ( 0 )
@@ -1193,8 +1214,8 @@ class MazePanel(wx.Panel):
 
     def AddToolbarZoomButton(self, tb):
         tb.AddSeparator()
-        bmp = wx.Bitmap ( "fit.png" )
-        tool = tb.AddLabelTool(wx.ID_ANY, "Fit", bmp, shortHelp="Fit", longHelp="")
+        bmp = wx.Bitmap ( "resource/fit.png" )
+        tool = tb.AddTool(wx.ID_ANY, "Fit", bmp)
         self.Bind(wx.EVT_TOOL, self.ZoomToFit, tool)
 
     def BuildToolbar(self):
@@ -1215,14 +1236,15 @@ class MazePanel(wx.Panel):
         Mode = self.ModesDict[event.GetId()] [ 0 ]
         self.Canvas.SetMode(Mode)
 
+        self.Log(self.EditMode)
         if self.EditMode == "Edit":
             self.SetCursor ( True, self.m_Colors [ 'WallExist'] )
         elif self.EditMode == "Erase":
             self.SetCursor ( True, self.m_Colors [ 'WallDetected'] )
         elif self.EditMode == "Start":
-            print "start"
+            pass
         elif self.EditMode == "Target":
-            print "target"
+            pass
         else:
             self.SetCursor ( False )
         self.Canvas.SetFocus()
@@ -1329,7 +1351,7 @@ class MazePanel(wx.Panel):
             self.MoveCursor ( xy )
 
         elif self.EditMode == "Start":
-            print "set start"
+            print("set start")
 
         elif self.EditMode == "Target":
             xy = event.GetPosition()
@@ -1408,7 +1430,7 @@ class MazePanel(wx.Panel):
             self.m_TargetXY = [ 255, 255 ]
         else:
             self.m_TargetXY = pos
-        print "set target:", self.m_TargetXY
+        print("set target:", self.m_TargetXY)
 
     def SetTargetSection ( self, pt, start ):
         pos = ( int ( ( pt [ 0 ] - pw/2 ) / bw ), int ( ( pt [ 1 ] - pw/2 ) / bw ) )
@@ -1437,7 +1459,7 @@ class MazePanel(wx.Panel):
         p = ( pt [ 0 ] - cw, pt [ 1 ] + cw )
         pos = ( int ( ( pt [ 0 ] - pw/2 ) / bw ), int ( ( pt [ 1 ] - pw/2 ) / bw ) )
         spot = ( pt [ 0 ] - cw, pt [ 1 ] - cw, cw*2, cw*2 )
-        print pos, spot
+        print(pos, spot)
         
         wall = self.GetNWallRect( pos )
         if IsOverlaps ( spot, wall ):
@@ -1462,7 +1484,7 @@ class MazePanel(wx.Panel):
             self.SetWall ( wall, wall_type, True )
 
             self.ToolBar.EnableTool(wx.ID_REDO, True)
-            print "undo", undoindex, wall
+            print("undo", undoindex, wall)
             if undoindex:
                 self.ToolBar.EnableTool(wx.ID_UNDO, True)
             else:
@@ -1479,7 +1501,7 @@ class MazePanel(wx.Panel):
             self.SetWall ( wall, wall_type, True )
             undoindex = undoindex + 1
 
-            print "redo", undoindex, wall
+            print("redo", undoindex, wall)
             self.ToolBar.EnableTool(wx.ID_UNDO, True)
             if undoindex < len ( undo ):
                 self.ToolBar.EnableTool(wx.ID_REDO, True)
@@ -1602,7 +1624,6 @@ class SettingPanel(wx.Panel):
                 gs.Add ( title, ( row, 0 ), flag = wx.ALIGN_RIGHT | wx.ALIGN_CENTRE_VERTICAL )
                 gs.Add ( sizer, ( row, 1 ), flag = wx.ALIGN_CENTRE_VERTICAL )
                 gs.Add ( description, ( row, 2 ), flag = wx.ALIGN_CENTRE_VERTICAL )
-    
 
             row = row + 1
 
@@ -1719,16 +1740,16 @@ class ControlPanel(wx.Panel):
 
         self.tree = wx.TreeCtrl(self, wx.ID_ANY) 
         
-        isz = (16,16)
+        isz = MAZE_SIZE
         il = wx.ImageList(isz[0], isz[1])
         self.fldridx     = il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,      wx.ART_OTHER, isz))
         self.fldropenidx = il.Add(wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN,   wx.ART_OTHER, isz))
         self.fileidx     = il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE, wx.ART_OTHER, isz))
 
         self.root = self.tree.AddRoot(self.m_Path)
-        self.tree.SetPyData(self.root, None)
+        self.tree.SetItemData(self.root, None)
         self.tree.SetItemImage(self.root, self.fldridx, wx.TreeItemIcon_Normal)
-        self.tree.SetItemImage(self.root, self.fldropenidx, wx.TreeItemIcon_Expanded)        
+        self.tree.SetItemImage(self.root, self.fldropenidx, wx.TreeItemIcon_Expanded)
 
         self.tree.SetImageList(il)
         self.il = il
@@ -1763,7 +1784,7 @@ class ControlPanel(wx.Panel):
             dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
             dlg.ShowModal()
             dlg.Destroy()
-            return;
+            return
 
         for f in flist:
             next = os.path.join(path, f)
@@ -1779,6 +1800,8 @@ class ControlPanel(wx.Panel):
                     self.maze_list.InsertStringItem (0, next [ l+1: ] )
 
     def AddFilesInDir(self, path, parent):
+        if load_dir == True:
+            return
         filter_ext = '.maz'
         try:
             flist = os.listdir(path)
@@ -1787,7 +1810,7 @@ class ControlPanel(wx.Panel):
             dlg = wx.MessageDialog(self.m_Parent, msg, 'LoadMazeFile', wx.OK | wx.ICON_ERROR )
             dlg.ShowModal()
             dlg.Destroy()
-            return;
+            return
 
         for f in flist:
             next = os.path.join(path, f)
@@ -1795,20 +1818,19 @@ class ControlPanel(wx.Panel):
             if os.path.isdir(next):
                 # directory
                 child = self.tree.AppendItem(parent, name)
-                self.tree.SetPyData(child, None)
+                self.tree.SetItemData(child, None)
                 self.tree.SetItemImage(child, self.fldridx, wx.TreeItemIcon_Normal)
                 self.tree.SetItemImage(child, self.fldropenidx, wx.TreeItemIcon_Expanded)
 
                 self.AddFilesInDir ( next, child )
             else:
                 # file
-                
                 ext = os.path.splitext(next)[-1]
                 ext = ext.lower()
                 if ext == filter_ext:
                     l = len ( self.m_Path )
                     item = self.tree.AppendItem ( parent, name )
-                    self.tree.SetPyData(item, None)
+                    self.tree.SetItemData(item, None)
                     self.tree.SetItemImage(item, self.fileidx, wx.TreeItemIcon_Normal)
                     self.tree.SetItemImage(item, self.fileidx, wx.TreeItemIcon_Selected)
                     # self.maze_list.InsertStringItem (0, next [ l+1: ] )
@@ -1816,8 +1838,10 @@ class ControlPanel(wx.Panel):
         self.tree.SortChildren(parent)
 
     def LoadMazeList(self):
+        global load_dir
         self.AddFilesInDir(self.m_Path, self.root)
         self.tree.Expand(self.root)
+        load_dir = True
         # (child, cookie) = self.tree.GetFirstChild(self.root)
         # if child.IsOk():
             # self.tree.Expand(child)
@@ -1844,7 +1868,7 @@ class ControlPanel(wx.Panel):
 
     def OnEnableRoutes ( self, event ):
         maze = self.m_Maze
-        print event.IsChecked() 
+        print(event.IsChecked())
         maze.EnableRoutes ( event.IsChecked() )
 
     def OnClickSetting(self, event):
@@ -1893,6 +1917,7 @@ class MainPanel(wx.Notebook):
 # log panel 
 class LogPanel(wx.Panel):
     def __init__(self, parent, ID=wx.ID_ANY, style=wx.TAB_TRAVERSAL):
+        print("[", inspect.currentframe().f_lineno, "] RUN LogPanel __init__")
         wx.Panel.__init__(self, parent, ID, style=style)
 
         sizer = wx.BoxSizer ( wx.HORIZONTAL )
@@ -1919,13 +1944,14 @@ ID_MENU_FILE_OPEN   = 100
 ID_MENU_FILE_SETUP  = 101
 ID_MENU_FILE_EXIT   = 102
 
-frame_size_x = 800
-frame_size_y = 750
+FRAME_SIZE_X = 800
+FRAME_SIZE_Y = 750
+FRAME_SIZE = (FRAME_SIZE_X, FRAME_SIZE_Y)
 
 class AppFrame(wx.Frame):
     def __init__(self, parent, title):
         # create frame
-        frame = wx.Frame.__init__(self, parent, ID_WINDOW_TOP_LEVEL, title, size=(frame_size_x, frame_size_y))
+        frame = wx.Frame.__init__(self, parent, ID_WINDOW_TOP_LEVEL, title, size=FRAME_SIZE)
 
         # Prepare the menu bar
         menuBar = wx.MenuBar()
@@ -1947,7 +1973,7 @@ class AppFrame(wx.Frame):
 
         log = LogPanel(sp, ID_WINDOW_LOG, style=sty)
         main = MainPanel ( sp )
-        sp.SplitHorizontally(main, log, frame_size_y)
+        sp.SplitHorizontally(main, log, FRAME_SIZE_Y)
         sp.SetSashGravity ( 1 )
         sp.SetMinimumPaneSize(60)
 
@@ -1972,7 +1998,7 @@ class AppFrame(wx.Frame):
         
     def OnKeyDown(self, evt):
         keycode = evt.GetKeyCode()
-        print "Frame KeyDown=", keycode
+        print("Frame KeyDown=", keycode)
 
     def PostInit(self):
         maze = wx.FindWindowById ( ID_WINDOW_MAZE, None )
@@ -1990,7 +2016,9 @@ class AppFrame(wx.Frame):
 # Application
 AppTitle = "GSDSim3 Micro Mouse Simulator"
 
+# Program Start
 class AppMain(wx.App):
+    print("Program Start")
     def OnInit(self):
         frame = AppFrame(None, AppTitle)
         self.SetTopWindow(frame)

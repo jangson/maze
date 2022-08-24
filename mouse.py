@@ -17,8 +17,8 @@ from    array import *
 from    math  import *
 from    scipy import integrate
 import  re
-import  thread
-import  Queue
+import  threading
+import  queue
 
 import  wx
 import  wx.lib.newevent
@@ -92,7 +92,7 @@ class MouseEnv():
         # maze property 
         self.block = 0.180
         self.poll = 0.012
-        self.MazeSize = ( 16, 16 )
+        self.MazeSize = MAZE_SIZE
         self.MazeStart = None
         self.MazeTarget = None
         self.MazeTargetSection = None 
@@ -239,7 +239,7 @@ class MouseMotor(MouseEnv):
     # Methods for overriding
     #-----------------------------------------------------------------------
     def DrawMouse ( self, pc, angle, redraw = True, color = 'White' ):
-        print "make this routine"
+        print("make this routine")
         pass
 
     #-----------------------------------------------------------------------
@@ -377,17 +377,17 @@ class MouseMotor(MouseEnv):
         self.DrawMouse( pc, angle, 'Green' )
         
         if not self.FastestFirstRun:
-            print "RT/T=%.3f,%.3f,A=%.1f,V=%.3f,%.3f,%.3f,S=%.0f" % ( 
+            print("RT/T=%.3f,%.3f,A=%.1f,V=%.3f,%.3f,%.3f,S=%.0f" % ( 
                     ( time.time () - self.starttime ) * 1000, 
                     ( self.currtime - self.starttime ) * 1000, 
                     degrees ( self.angle ),
                     vc,vl,vr, 
                     sc * 1000
-                    )
+                    ))
 
     def GetTimeByAccel ( self, a, s, v0 ):
         if a<0:
-            print "### Error accel is minus ###"
+            print("### Error accel is minus ###")
             exit ()
         if a == 0:
             t = s / v0
@@ -498,7 +498,7 @@ class MouseOpticalSensor(MouseEnv):
         maze = self.m_Maze
 
         for wall in range ( len ( self.Walls ) ) :
-            print wall
+            print(wall)
             maze.DetectedWall ( wall, True )
             if self.Walls [ wall ] < WALL_EXIST:
                 self.Walls [ wall ] = WALL_NONE
@@ -640,7 +640,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
         self.RunCount = 0 # 1st, 1st return, 2st, 2st return
 
-        self.MazeSize = ( 16, 16 )
+        self.MazeSize = MAZE_SIZE
         self.MazeStart = None
         self.MazeTarget = None
         self.MazeTargetSection = None
@@ -649,11 +649,6 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
         self.FirstRunVelocity = 1.
 
-        # self.MaxAccel = 10.
-        # self.AccelStop = 5.
-        # self.MaxVelocity = 4.
-        # self.MaxTurnVelocity = 1.
- 
     def InitDirsMap ( self, search_unknown ):
         maze = self.m_Maze
         self.MouseBuffer = []
@@ -990,8 +985,8 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
                     # print "turn,turns=", turn [ diagonal ], turns 
 
                     if not turn [ diagonal ]:
-                        print "### direction error ###"
-                        print "diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] )
+                        print("### direction error ###")
+                        print("diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] ))
                         self.Running = False
                         self.Started = False
                         exit ()
@@ -1019,7 +1014,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
                         else:
                             return ( None, 0, diagonal )
 
-            print '### Did not get turn ###'
+            print('### Did not get turn ###')
             return ( None, 0, diagonal )
 
         def IsKnownWall ( routes, count ):
@@ -1112,8 +1107,8 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
             if turn == 'F_T0':
                 if moves [ -1 ] [ 0 ] != 'F_T0':
-                        print "### direction error ###"
-                        print "diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] )
+                        print("### direction error ###")
+                        print("diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] ))
                         self.Running = False
                         self.Started = False
                         exit ()
@@ -1123,8 +1118,8 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
             elif turn == 'FD_T0':
                 if moves [ -1 ] [ 0 ] != 'FD_T0':
-                        print "### direction error ###"
-                        print "diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] )
+                        print("### direction error ###")
+                        print("diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] ))
                         self.Running = False
                         self.Started = False
                         exit ()
@@ -1145,15 +1140,15 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         if add_stop:
 
             if moves [ -1 ] [ 0 ] != 'F_T0':
-                print "### direction error ###"
-                print "diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] )
+                print("### direction error ###")
+                print("diagonal=%d, turn=%s" % ( diagonal, turn [ diagonal ] ))
                 self.Running = False
                 self.Started = False
                 exit ()
 
             if turn_appended and not maze.GetWall ( new_target ) == WALL_NONE:
                 ### FIXME ###
-                print "Quickly stop"
+                print("Quickly stop")
                 moves [ -1 ] [ 0 ] = 'F_T0_STOP'
                 moves [ -1 ] [ 1 ] = moves [ -1 ] [ 1 ] - block/2
                 moves.append ( [ 'MOVE_BACK', 0, target ] )
@@ -1233,17 +1228,17 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
                 self.MoveWithVelocityDistance  ( self.FastTurnVelocity, s3 )
         
         elif cmd == MouseMoves [ 'F_T0_STOP' ]:
-            print "#0", distance
+            print("#0", distance)
             s1, s2, s3 = self.GetMoveDistance ( distance, self.vl, self.FastMaxVelocity, 0, self.FastAccel, self.FastAccelBrake )
-            print "#1"
+            print("#1")
             self.MoveWithAccelDistance ( self.FastAccel, s1 )
             if s2:
-                print "#2"
+                print("#2")
                 self.MoveWithAccelDistance ( 0, s2 )
             if s3:
-                print "#3"
+                print("#3")
                 self.MoveWithVelocityDistance  ( 0, s3 )
-            print "#4"
+            print("#4")
             self.mdir = ( self.mdir + Turns [ 'T180'] ) % 8
 
         elif cmd == MouseMoves [ 'FD_T0' ]:
@@ -1321,10 +1316,10 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
             add_angle = 1
 
         elif turn == Turns [ 'TL90' ]:
-            print "DoMoveDir: TL90"
+            print("DoMoveDir: TL90")
 
         elif turn == Turns [ 'TR90' ]:
-            print "DoMoveDir: TR90"
+            print("DoMoveDir: TR90")
 
         elif turn == Turns [ 'TL135']:
             self.DoMove ( MouseMoves [ 'MOVE_STOP' ] )
@@ -1437,7 +1432,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
                 # print self.TracePosition
 
                 if not self.TraceUnknown:
-                    print "############### found #################"
+                    print("############### found #################")
                     Found = True
 
             if Found:
@@ -1589,7 +1584,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         self.mdir = Directions [ 'N' ]
         # self.DetectAllWalls ()
 
-        print "############### First Running #################"
+        print("############### First Running #################")
         self.FastestFirstRun = self.EnableFastestFirstRun
         self.InitRun ()
         self.SetFastRunParam ( 4, self.FirstRunVelocity , 10, -20 )
@@ -1597,7 +1592,7 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
         if not self.FastestFirstRun:
             time.sleep ( 1 )
 
-        print "############### Search shortest path #################"
+        print("############### Search shortest path #################")
         self.InitRun ()
         self.SetFastRunParam ( 4, self.FirstRunVelocity , 10, -20 )
         self.RunForSearch ( start, 0, self.GetTarget () ) 
@@ -1606,13 +1601,13 @@ class MouseBrain(MouseMotor, MouseOpticalSensor, MouseGyroSensor):
 
         self.FastestFirstRun = False
         while ( 1 ):
-            print "############### Second running #################"
+            print("############### Second running #################")
             self.InitRun ()
             self.SetFastRunParam ( 4, 2, 20, -40 )
             self.RunFastest( self.mpos, self.mdir, self.GetTarget (), True )
             time.sleep ( 1 )
 
-            print "############### Second comming back home #################"
+            print("############### Second comming back home #################")
             self.InitRun ()
             self.SetFastRunParam ( 4, 1, 10, -20 )
             self.RunFastestToHome ( self.mpos, self.mdir, start )
@@ -1642,7 +1637,7 @@ class Mouse(MouseBrain):
 
         self.Started = False
         self.Running = False
-        self.CmdQueue = Queue.Queue(5)
+        self.CmdQueue = queue.Queue(5)
 
     #-----------------------------------------------------------------------
     # Methods for draw mouse 
@@ -1671,7 +1666,7 @@ class Mouse(MouseBrain):
 
     def MouseStart(self):
         self.Running = True
-        thread.start_new_thread ( self.MouseMain, () )
+        threading._start_new_thread ( self.MouseMain, () )
 
     def Pause(self, wait = False):
         run = self.IsRunning ()
